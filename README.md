@@ -28,11 +28,15 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 1. In Home Assistant, go to **Settings > Devices & services**.
 2. Click **Add integration**, then search for **Paxton10**.
 3. In **Connection**, choose **Direct** or **Remote**.
-4. Enter the server address or remote ID:
-   - Direct: the server's IP address or host name, for example `192.0.2.10`.
-   - Remote: the remote ID from the `paxton10remote.com` address, for example `abc123`.
-5. Enter the Paxton account's username (email address) and password. The integration signs in straight away and shows any error on the same screen.
-6. Check the server name, software version, and the number of doors and devices found, then click **Submit**.
+4. Enter the server details and the Paxton account on one screen:
+   - Direct: in **Server address**, the server's IP address or host name, for example `192.0.2.10`.
+   - Remote: in **Remote ID**, the ID from the site's remote access address, for example `abc123`. You can paste the whole address, such as `https://abc123.paxton10remote.com`.
+   - The Paxton account's username (email address) and password.
+
+   The integration signs in straight away. If it can't, the error and its cause appear on the same screen, so you can fix the address and try again.
+5. Check the server name, software version, doors, and devices found.
+6. Choose whether to turn on **Allow door control** and **Include user names in events**. Both are off by default. You can change them later in **Configure**.
+7. Click **Submit**.
 
 Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in expects, never the password. That hash is enough to sign in to this Paxton10 server, so treat Home Assistant backups as sensitive.
 
@@ -41,9 +45,12 @@ Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in exp
 | Parameter | Description |
 |---|---|
 | Connection | **Direct** connects to the server over HTTPS. The server's self-signed certificate isn't checked. **Remote** goes through Paxton's remote access relay at `p10remote.com`. Direct is faster. |
-| Server address or remote ID | The server's address for Direct, or the site's remote ID for Remote. |
+| Server address (Direct) | The server's IP address or host name, with an optional port. A pasted URL is reduced to its host. |
+| Remote ID (Remote) | The site's remote ID. A pasted `paxton10remote.com` address is reduced to its ID. |
 | Username | The Paxton10 account's email address. |
 | Password | The Paxton10 account's password. Only its hash is stored. |
+| Allow door control | See [Options](#options). |
+| Include user names in events | See [Options](#options). |
 
 To change the connection later, open the integration and click **Reconfigure**. Reconfigure refuses a server that belongs to a different site. If the password changes, Home Assistant asks you to sign in again.
 

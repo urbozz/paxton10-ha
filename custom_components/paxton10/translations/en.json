@@ -3,38 +3,51 @@
     "step": {
       "user": {
         "title": "Connect to Paxton10",
-        "description": "Choose how Home Assistant reaches the Paxton10 server. Use Direct when Home Assistant is on the site network.",
+        "description": "Choose how Home Assistant reaches the Paxton10 server.",
         "data": {
           "route": "Connection"
         },
         "data_description": {
-          "route": "Direct connects to the server's address. Remote goes through Paxton's remote access service."
+          "route": "Direct connects to the server on the site network. It's faster. Remote goes through Paxton's remote access service and works from anywhere."
         }
       },
-      "connection": {
-        "title": "Server",
+      "server_direct": {
+        "title": "Server and account",
         "data": {
-          "target": "Server address or remote ID"
-        },
-        "data_description": {
-          "target": "For Direct, the server's IP address or host name, for example 192.0.2.10. For Remote, the remote ID from the paxton10remote.com address, for example abc123."
-        }
-      },
-      "account": {
-        "title": "Paxton account",
-        "description": "Use a dedicated Paxton account for Home Assistant, so the Paxton event log shows its actions.",
-        "data": {
+          "target": "Server address",
           "username": "Username",
           "password": "Password"
         },
         "data_description": {
-          "username": "The email address of the Paxton10 account.",
+          "target": "The server's IP address or host name, for example 192.0.2.10. Home Assistant must be able to reach it on port 443.",
+          "username": "The email address of the Paxton10 account. Use a dedicated account, so the Paxton event log shows what Home Assistant did.",
+          "password": "Home Assistant stores only the password hash that the Paxton10 server expects."
+        }
+      },
+      "server_remote": {
+        "title": "Remote ID and account",
+        "data": {
+          "target": "Remote ID",
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "target": "The ID from the site's remote access address, for example abc123 from abc123.paxton10remote.com. You can paste the whole address.",
+          "username": "The email address of the Paxton10 account. Use a dedicated account, so the Paxton event log shows what Home Assistant did.",
           "password": "Home Assistant stores only the password hash that the Paxton10 server expects."
         }
       },
       "confirm": {
         "title": "Add {name}?",
-        "description": "Server: {server}\nSoftware version: {version}\nDoors found: {doors}\nControllers and entry panels found: {devices}"
+        "description": "Server: {server}\nSoftware version: {version}\nDoors found ({doors}): {door_names}\nControllers and entry panels found: {devices}\n\nYou can change these settings later in Configure.",
+        "data": {
+          "allow_door_control": "Allow door control",
+          "include_user_names": "Include user names in events"
+        },
+        "data_description": {
+          "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant never sends a write to Paxton.",
+          "include_user_names": "Adds residents' names to door events. This is personal data, so it's off by default."
+        }
       },
       "reauth_confirm": {
         "title": "Sign in again",
@@ -54,22 +67,33 @@
           "route": "Connection"
         },
         "data_description": {
-          "route": "Direct connects to the server's address. Remote goes through Paxton's remote access service."
+          "route": "Direct connects to the server on the site network. Remote goes through Paxton's remote access service."
         }
       },
-      "reconfigure_connection": {
-        "title": "Server",
+      "reconfigure_server_direct": {
+        "title": "Server address",
         "data": {
-          "target": "Server address or remote ID"
+          "target": "Server address"
         },
         "data_description": {
-          "target": "For Direct, the server's IP address or host name. For Remote, the remote ID."
+          "target": "The server's IP address or host name. Home Assistant must be able to reach it on port 443."
+        }
+      },
+      "reconfigure_server_remote": {
+        "title": "Remote ID",
+        "data": {
+          "target": "Remote ID"
+        },
+        "data_description": {
+          "target": "The ID from the site's remote access address. You can paste the whole address."
         }
       }
     },
     "error": {
       "invalid_auth": "The username or password is wrong.",
-      "cannot_connect": "Can't connect to the Paxton10 server.",
+      "cannot_connect": "Can't connect to the Paxton10 server: {error}",
+      "invalid_direct_target": "Enter the server's IP address or host name.",
+      "invalid_remote_target": "Enter the remote ID, for example abc123.",
       "unknown": "Unexpected error. Check the Home Assistant log."
     },
     "abort": {
@@ -96,7 +120,7 @@
           "device_interval": "How often to read controller and entry panel status.",
           "event_interval": "How often to read the event log. Minimum 5 seconds.",
           "fallback": "If the configured route fails, try the other one ({other_route}).",
-          "fallback_target": "The address or remote ID for the {other_route} route.",
+          "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",
           "include_user_names": "Adds residents' names to door events. This is personal data, so it's off by default."
         }
       }

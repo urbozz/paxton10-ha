@@ -224,10 +224,13 @@ def test_unknown_battery_codes_are_unknown() -> None:
     from custom_components.paxton10.sensor import DEVICE_SENSORS
 
     sensors = {d.key: d for d in DEVICE_SENSORS}
-    device = Device(1, KIND_CONTROLLER, "c", "m", None, None, None, 1, None, 0, 0, 0)
+    device = Device(1, KIND_CONTROLLER, "c", "m", None, None, None, 1, None, 0, 2, 0)
     assert sensors["battery"].value(device) == "not_connected"
-    assert sensors["battery_state"].value(device) is None  # 0 is Unknown in the web app
-    assert sensors["power_supply"].value(device) is None
+    # No battery fitted: the charging state Paxton still reports means nothing.
+    assert sensors["battery_state"].value(device) is None
+    assert sensors["power_supply"].value(device) is None  # 0 is Unknown in the web app
+    device.battery_charge, device.battery_state = 3, 0
+    assert sensors["battery_state"].value(device) is None
     device.battery_charge, device.psu_state = 9, None
     assert sensors["battery"].value(device) is None
     assert sensors["power_supply"].value(device) is None

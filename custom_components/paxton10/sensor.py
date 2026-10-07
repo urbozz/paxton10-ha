@@ -76,7 +76,8 @@ DEVICE_SENSORS: tuple[DeviceDescription, ...] = (
         options=list(BATTERY_STATE.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
         controllers_only=True,
-        value=lambda d: _mapped(BATTERY_STATE, d.battery_state),
+        # Without a battery the controller still reports a state (charging on GEN1, 0 on GEN2). It means nothing.
+        value=lambda d: None if d.battery_charge == 0 else _mapped(BATTERY_STATE, d.battery_state),
     ),
     DeviceDescription(
         key="power_supply",
