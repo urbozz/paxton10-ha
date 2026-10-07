@@ -95,6 +95,11 @@ class DirectTransport:
         self._session = session
         self._base = f"https://{host}"
 
+    @property
+    def base_url(self) -> str:
+        """For the live hub, which runs on the same server."""
+        return self._base
+
     async def start(self) -> None:
         return None
 
@@ -262,6 +267,11 @@ class PaxtonClient:
         self.allow_writes = allow_writes
         self._token: str | None = None
         self.token_expires_in: int | None = None
+
+    @property
+    def token(self) -> str | None:
+        """The bearer token from the last sign-in. The live hub passes it on its query string."""
+        return self._token
 
     async def sign_in(self, username: str, password: str) -> None:
         await self.sign_in_with_hash(username, password_hash(password))
