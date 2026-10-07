@@ -178,7 +178,12 @@ def main() -> int:
     parser.add_argument("--seconds", type=int, default=60, help="how long to listen (default 60)")
     parser.add_argument("--clipboard", action="store_true", help="read the password from the macOS clipboard")
     parser.add_argument("--out", help="report path (default probe-live-direct.json)")
-    return asyncio.run(run(parser.parse_args()))
+    try:
+        return asyncio.run(run(parser.parse_args()))
+    except KeyboardInterrupt:
+        # The hub client has already unsubscribed and aborted in run()'s finally.
+        print("\nStopped.")
+        return 0
 
 
 if __name__ == "__main__":

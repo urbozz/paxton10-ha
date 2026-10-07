@@ -39,7 +39,7 @@ from .const import (
 )
 from .discovery import discover_site
 from .models import KIND_CONTROLLER, DoorEvent, Site, door_model, hardware_model
-from .source import PollingSource, SourceUpdate, UpdateSource
+from .source import LiveSource, PollingSource, SourceUpdate, UpdateSource
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -162,8 +162,8 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
         return self.server_device_id
 
     async def async_start(self) -> None:
-        """Start the update source after the first refresh."""
-        self.source = PollingSource(
+        """Start the update source after the first refresh. Events come live from the hub on Direct."""
+        self.source = LiveSource(
             self.conn,
             self.data,
             self.options.device_interval,

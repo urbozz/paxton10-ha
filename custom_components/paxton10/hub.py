@@ -28,7 +28,7 @@ from urllib.parse import urlencode
 
 import aiohttp
 
-from .api import PaxtonAuthError, PaxtonBlockedRequest, PaxtonError
+from .api import PaxtonBlockedRequest, PaxtonError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,13 @@ HUB_METHOD_ALLOWLIST = frozenset({METHOD_SUBSCRIBE_EVENTS, METHOD_UNSUBSCRIBE_EV
 
 class HubDisconnected(PaxtonError):
     """The server ended the connection, or asked the client to reconnect."""
+
+
+class HubUnauthorized(PaxtonError):
+    """The hub rejected the bearer token, usually because it expired. Sign in again and reconnect.
+
+    Not a PaxtonAuthError: the password may be fine. A wrong password shows up on sign-in.
+    """
 
 
 @dataclass(frozen=True)
@@ -111,7 +118,7 @@ class LongPollHub:
         except aiohttp.ClientError as err:
             raise PaxtonError(f"hub {path}: {type(err).__name__}: {err}".rstrip(": ")) from err
         if status == 401:
-            raise PaxtonAuthError(f"hub {path}: token rejected")
+            raise HubUnauthorized(f"hub {path}: token rejected")
         if status >= 400:
             raise PaxtonError(f"hub {path}: HTTP {status}")
         try:

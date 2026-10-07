@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from collections.abc import Callable
 from typing import Any
 
 import aiohttp
@@ -129,6 +130,34 @@ class PaxtonConnection:
         self._client, self.active_route = None, None
 
     async def close(self) -> None:
+        async with self._lock:
+            await self._drop()
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        return self._session
+
+    async def hub_target(self) -> tuple[str, Callable[[], str | None]] | None:
+        """The live hub's base URL and a token getter, or None when the active route isn't Direct.
+
+        Signs in first if needed. The getter reads the current token on every call, so the hub
+        picks up a new token after a re-sign-in without reconnecting.
+        """
+        async with self._lock:
+            if self._client is None:
+                await self._connect_locked()
+            client = self._client
+        assert client
+        if self.active_route != ROUTE_DIRECT or not isinstance(client.transport, DirectTransport):
+            return None
+
+        def token() -> str | None:
+            return self._client.token if self._client else None
+
+        return client.transport.base_url, token
+
+    async def renew(self) -> None:
+        """Drop the client, so the next call signs in again. For a token the hub rejected."""
         async with self._lock:
             await self._drop()
 

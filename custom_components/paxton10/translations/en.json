@@ -118,7 +118,7 @@
         "data_description": {
           "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant sends no writes at all.",
           "device_interval": "How often to read controller and entry panel status.",
-          "event_interval": "How often to read the event log. Minimum 5 seconds.",
+          "event_interval": "On Direct, events arrive live from the server, and this is only used while the live connection is down. On Remote, how often to read the event log. Minimum 5 seconds.",
           "fallback": "If the configured route fails, try the other one ({other_route}).",
           "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",
           "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default."

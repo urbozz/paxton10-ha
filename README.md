@@ -67,7 +67,7 @@ Open the integration and click **Configure**.
 |---|---|---|
 | Allow door control | Off | Adds an **Open** button for each door and the gate. When off, Home Assistant creates no buttons and the client refuses every write. |
 | Device status interval | 30 s | How often to read controllers, entry panels, and the system summary. Minimum 10 s. |
-| Event interval | 10 s | How often to read the event log. Minimum 5 s. |
+| Event interval | 10 s | How often to read the event log on Remote, or on Direct while the live feed is down. Minimum 5 s. |
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
 | Include user names in events | Off | Adds the user's name to door events. User names are personal data. |
@@ -150,13 +150,16 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 
 ## How data updates
 
-- **Events:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen.
+- **Events on Direct:** live. The integration subscribes to the server's live event feed, the same one the Paxton10 web app uses, and fires each event as it arrives, usually within a second. Every 5 minutes it also reads the event log, in case the feed missed one.
+- **Events on Remote, or while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
 - **Device status and summary:** every device status interval.
 - **Layout:** every hour, the integration reads the device tree again. It adds new doors and devices, and removes devices that are no longer on the server.
 
 If the device read or the event read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
 
-Paxton10 also pushes live updates over a SignalR hub. This version doesn't use it yet. `source.py` puts all fetching behind an `UpdateSource` interface, so a live source can replace polling later without changing any entity.
+An event never fires twice, even when it arrives both live and from the event log. A live feed failure on its own doesn't make entities unavailable, because the event log covers the gap. Home Assistant logs at info level when the live feed connects and when it falls back to polling. Diagnostics show which is in use as `event_source`: `live` or `polling`.
+
+The live feed is an ASP.NET SignalR 2 long poll at `/signalr` on the server, so it only works on Direct. Paxton's remote access service relays it differently, and the integration doesn't use that yet.
 
 ## Examples
 
@@ -209,8 +212,9 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 ## Known limitations
 
 - The API is undocumented and can change with any Paxton upgrade.
-- Updates are polled. A door event can take up to the event interval to appear.
-- If more than 50 events happen between two polls, only the newest 50 are fired.
+- On Remote, and on Direct while the live feed is down, events are polled. A door event can then take up to the event interval to appear.
+- While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
+- Device status and the summary are always polled.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
 - The controller list is large (about 57 KB per controller) because Paxton includes every input and output. With 10 controllers at the default 30 s interval, that's about 1.6 GB a day on the local network. Raise the device status interval if that matters.
 - The server isn't discovered automatically. Enter its address yourself.
