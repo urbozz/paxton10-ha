@@ -1,0 +1,258 @@
+"""Site model: what the integration knows about doors, devices, and the server.
+
+Parsers take the raw JSON from the Paxton10 API. No Home Assistant imports.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+from .const import EVENT_TYPE_OTHER, EVENT_TYPES
+
+KIND_CONTROLLER = "controller"
+KIND_ENTRY_PANEL = "entry_panel"
+
+# System/Summary descriptions mapped to sensor keys.
+SUMMARY_KEYS: dict[str, str] = {
+    "Active users": "active_users",
+    "Total users": "total_users",
+    "Total devices": "total_devices",
+    "Unacknowledged alarms": "unacknowledged_alarms",
+    "Offline devices": "offline_devices",
+}
+
+
+@dataclass(frozen=True)
+class Door:
+    """A door, gate, or barrier."""
+
+    entity_id: int
+    name: str
+    appliance_type: int
+    entity_type_id: int
+    parent_id: int
+    group_name: str | None
+
+
+@dataclass
+class Device:
+    """A door controller or entry panel."""
+
+    entity_id: int
+    kind: str
+    name: str
+    model: str
+    serial: str | None
+    firmware: str | None
+    ip: str | None
+    status: int | None
+    last_contact: datetime | None
+    battery_charge: int | None = None
+    battery_state: int | None = None
+    psu_state: int | None = None
+    door_ids: tuple[int, ...] = ()
+
+    @property
+    def online(self) -> bool | None:
+        # Status 1 for every device while the server's summary showed 0 offline devices.
+        # Other values are assumed offline until checked against the web UI.
+        if self.status is None:
+            return None
+        return self.status == 1
+
+
+@dataclass
+class Server:
+    """The Paxton10 server itself."""
+
+    site_id: str
+    system_name: str
+    server_name: str | None
+    version: str | None
+    utc_offset_minutes: int
+
+
+@dataclass
+class Site:
+    """Everything discovered at setup and refreshed by the update source."""
+
+    server: Server
+    doors: dict[int, Door] = field(default_factory=dict)
+    devices: dict[int, Device] = field(default_factory=dict)
+    summary: dict[str, int] = field(default_factory=dict)
+    # Which optional reads the account is allowed to make.
+    can_read_devices: bool = True
+    can_read_summary: bool = True
+
+
+@dataclass(frozen=True)
+class DoorEvent:
+    """One event from the Paxton10 event log, reduced to what Home Assistant needs."""
+
+    event_id: int
+    event_type_id: int | None
+    event_type: str
+    time: datetime | None
+    door_ids: tuple[int, ...]
+    user_name: str | None
+
+
+def parse_time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    text = value
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    # .NET writes seven fractional digits; Python accepts six.
+    head, dot, rest = text.partition(".")
+    if dot:
+        n = 0
+        while n < len(rest) and rest[n].isdigit():
+            n += 1
+        digits, tz = rest[:n], rest[n:]
+        text = f"{head}.{digits[:6]}{tz}"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def offset_suffix(minutes: int) -> str:
+    sign = "+" if minutes >= 0 else "-"
+    hours, mins = divmod(abs(minutes), 60)
+    return f"{sign}{hours:02d}:{mins:02d}"
+
+
+def parse_server(version: Any, server_name: Any, parameters: dict[str, Any]) -> Server:
+    regional = parameters.get("RegionalSettings") or {}
+    name = server_name.get("ServerName") if isinstance(server_name, dict) else None
+    return Server(
+        site_id=str(parameters["SiteId"]),
+        system_name=parameters.get("SystemName") or "Paxton10",
+        server_name=name,
+        version=version if isinstance(version, str) else None,
+        utc_offset_minutes=int(regional.get("MinutesUtcOffset") or 0),
+    )
+
+
+def parse_summary(body: Any) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for stat in body if isinstance(body, list) else []:
+        for item in stat.get("Data") or []:
+            key = SUMMARY_KEYS.get(item.get("Description"))
+            if key is not None and isinstance(item.get("Value"), int):
+                out[key] = item["Value"]
+    return out
+
+
+def _mapped_doors(device: dict[str, Any]) -> tuple[int, ...]:
+    ids: list[int] = []
+    for connector in device.get("Connectors") or []:
+        for peripheral in connector.get("Peripherals") or []:
+            mapped = peripheral.get("MappedAppliance") or {}
+            appliance_id = mapped.get("ApplianceId")
+            if isinstance(appliance_id, int) and appliance_id not in ids:
+                ids.append(appliance_id)
+    return tuple(ids)
+
+
+def parse_devices(body: Any, kind: str) -> dict[int, Device]:
+    out: dict[int, Device] = {}
+    for raw in body if isinstance(body, list) else []:
+        entity_id = raw.get("EntityId")
+        if not isinstance(entity_id, int):
+            continue
+        battery = raw.get("BatteryStatus") or {}
+        psu = raw.get("PSUPowerStatus") or {}
+        name = raw.get("Name") if kind == KIND_ENTRY_PANEL else None
+        out[entity_id] = Device(
+            entity_id=entity_id,
+            kind=kind,
+            name=name or raw.get("Description") or f"Device {entity_id}",
+            model=raw.get("ModelName") or raw.get("Description") or kind,
+            serial=raw.get("UniqueId"),
+            firmware=raw.get("FirmwareVersion"),
+            ip=raw.get("IPv4Address"),
+            status=raw.get("Status"),
+            last_contact=parse_time(raw.get("LastContact")),
+            battery_charge=battery.get("Charge") if kind == KIND_CONTROLLER else None,
+            battery_state=battery.get("State") if kind == KIND_CONTROLLER else None,
+            psu_state=psu.get("PowerState") if kind == KIND_CONTROLLER else None,
+            door_ids=_mapped_doors(raw),
+        )
+    return out
+
+
+def name_controllers(devices: dict[int, Device], doors: dict[int, Door]) -> None:
+    """Controllers all share one description, so name each after the door it drives."""
+    for device in devices.values():
+        if device.kind != KIND_CONTROLLER:
+            continue
+        names = [doors[d].name for d in device.door_ids if d in doors]
+        # Never build a name from the serial: diagnostics redact serials, and names are logged.
+        device.name = f"{names[0]} controller" if names else f"Controller {device.entity_id}"
+
+
+def door_model(appliance_type: int) -> str:
+    return {1: "Door", 2: "Gate", 3: "Barrier"}.get(appliance_type, "Door")
+
+
+def hardware_model(device: Device) -> str:
+    return device.model if device.kind == KIND_CONTROLLER else "Paxton10 Entry Panel"
+
+
+def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
+    event_id = raw.get("EventId")
+    if not isinstance(event_id, int):
+        return None
+    type_id = raw.get("EventTypeId")
+    door_ids = tuple(i for i in raw.get("ApplianceIds") or [] if isinstance(i, int))
+    return DoorEvent(
+        event_id=event_id,
+        event_type_id=type_id if isinstance(type_id, int) else None,
+        event_type=EVENT_TYPES.get(type_id, EVENT_TYPE_OTHER) if isinstance(type_id, int) else EVENT_TYPE_OTHER,
+        time=parse_time(raw.get("EventTime")),
+        door_ids=door_ids,
+        user_name=_user_name(raw.get("UserData")) if include_user else None,
+    )
+
+
+def _user_name(user_data: Any) -> str | None:
+    # The UserData shape hasn't been seen in a live response yet. Accept the likely forms.
+    if isinstance(user_data, list):
+        user_data = user_data[0] if user_data else None
+    if isinstance(user_data, str):
+        return user_data or None
+    if not isinstance(user_data, dict):
+        return None
+    for key in ("Name", "UserName", "FullName", "DisplayName"):
+        value = user_data.get(key)
+        if isinstance(value, str) and value:
+            return value
+    parts = [user_data.get(k) for k in ("FirstName", "Surname", "LastName")]
+    joined = " ".join(p for p in parts if isinstance(p, str) and p)
+    return joined or None
+
+
+def event_filter(utc_offset_minutes: int) -> dict[str, Any]:
+    """The body the Paxton10 web UI posts to /api/v2/Events/."""
+    suffix = offset_suffix(utc_offset_minutes)
+    return {
+        "OrderBy": "EventTime",
+        "SortDirection": "Desc",
+        "ApplianceIds": None,
+        "UserIds": None,
+        "EventCategoryIds": None,
+        "EventTypeIds": None,
+        "CustomDataIds": [],
+        "StandardEventColumns": ["time", "userName", "where", "SiteName", "info", "entityIconId"],
+        "AlarmEventsFirst": False,
+        "StartTimeWithOffset": f"2000-01-01T00:00:00.000{suffix}",
+        "EndTimeWithOffset": f"3000-01-01T00:00:00.000{suffix}",
+        "IsTimeRangeSelected": False,
+        "Video": False,
+        "ClusterIds": None,
+    }

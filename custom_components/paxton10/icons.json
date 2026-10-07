@@ -1,0 +1,24 @@
+{
+  "entity": {
+    "button": {
+      "open": { "default": "mdi:door-open" }
+    },
+    "event": {
+      "door_event": { "default": "mdi:door" }
+    },
+    "sensor": {
+      "software_version": { "default": "mdi:information-outline" },
+      "active_users": { "default": "mdi:account-check" },
+      "total_users": { "default": "mdi:account-multiple" },
+      "total_devices": { "default": "mdi:devices" },
+      "unacknowledged_alarms": { "default": "mdi:alarm-light" },
+      "offline_devices": { "default": "mdi:lan-disconnect" },
+      "last_contact": { "default": "mdi:clock-check-outline" },
+      "firmware": { "default": "mdi:chip" },
+      "ip_address": { "default": "mdi:ip-network" },
+      "battery_charge": { "default": "mdi:battery" },
+      "battery_state": { "default": "mdi:battery-heart-variant" },
+      "psu_state": { "default": "mdi:power-plug" }
+    }
+  }
+}

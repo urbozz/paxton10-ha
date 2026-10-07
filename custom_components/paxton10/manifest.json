@@ -1,0 +1,13 @@
+{
+  "domain": "paxton10",
+  "name": "Paxton10",
+  "codeowners": [
+    "@urbozz"
+  ],
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "quality_scale": "gold",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,146 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Paxton10",
+        "description": "Choose how Home Assistant reaches the Paxton10 server. Use Direct when Home Assistant is on the site network.",
+        "data": { "route": "Connection" },
+        "data_description": { "route": "Direct connects to the server's address. Remote goes through Paxton's remote access service." }
+      },
+      "connection": {
+        "title": "Server",
+        "data": { "target": "Server address or remote ID" },
+        "data_description": { "target": "For Direct, the server's IP address or host name, for example 192.0.2.10. For Remote, the remote ID from the paxton10remote.com address, for example abc123." }
+      },
+      "account": {
+        "title": "Paxton account",
+        "description": "Use a dedicated Paxton account for Home Assistant, so the Paxton event log shows its actions.",
+        "data": { "username": "Username", "password": "Password" },
+        "data_description": {
+          "username": "The email address of the Paxton10 account.",
+          "password": "Home Assistant stores only the password hash that the Paxton10 server expects."
+        }
+      },
+      "confirm": {
+        "title": "Add {name}?",
+        "description": "Server: {server}\nSoftware version: {version}\nDoors found: {doors}\nControllers and entry panels found: {devices}"
+      },
+      "reauth_confirm": {
+        "title": "Sign in again",
+        "description": "The Paxton10 server rejected the stored credentials. Enter them again.",
+        "data": { "username": "Username", "password": "Password" },
+        "data_description": {
+          "username": "The email address of the Paxton10 account.",
+          "password": "The account's current password."
+        }
+      },
+      "reconfigure": {
+        "title": "Change connection",
+        "data": { "route": "Connection" },
+        "data_description": { "route": "Direct connects to the server's address. Remote goes through Paxton's remote access service." }
+      },
+      "reconfigure_connection": {
+        "title": "Server",
+        "data": { "target": "Server address or remote ID" },
+        "data_description": { "target": "For Direct, the server's IP address or host name. For Remote, the remote ID." }
+      }
+    },
+    "error": {
+      "invalid_auth": "The username or password is wrong.",
+      "cannot_connect": "Can't connect to the Paxton10 server.",
+      "unknown": "Unexpected error. Check the Home Assistant log."
+    },
+    "abort": {
+      "already_configured": "This Paxton10 site is already set up.",
+      "reauth_successful": "Signed in again.",
+      "reconfigure_successful": "Connection updated.",
+      "wrong_site": "That server is a different Paxton10 site."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Paxton10 options",
+        "data": {
+          "allow_door_control": "Allow door control",
+          "device_interval": "Device status interval",
+          "event_interval": "Event interval",
+          "fallback": "Use a fallback route",
+          "fallback_target": "Fallback address or remote ID",
+          "include_user_names": "Include user names in events"
+        },
+        "data_description": {
+          "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant sends no writes at all.",
+          "device_interval": "How often to read controller and entry panel status.",
+          "event_interval": "How often to read the event log. Minimum 5 seconds.",
+          "fallback": "If the configured route fails, try the other one ({other_route}).",
+          "fallback_target": "The address or remote ID for the {other_route} route.",
+          "include_user_names": "Adds residents' names to door events. This is personal data, so it's off by default."
+        }
+      }
+    },
+    "error": {
+      "fallback_target_required": "Enter the fallback address or remote ID."
+    }
+  },
+  "selector": {
+    "route": {
+      "options": { "direct": "Direct", "remote": "Remote" }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connectivity": { "name": "Connectivity" }
+    },
+    "button": {
+      "open": { "name": "Open" }
+    },
+    "event": {
+      "door_event": {
+        "name": "Door event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "access_permitted": "Access permitted",
+              "opened_by_software": "Opened by software",
+              "unlocked": "Unlocked",
+              "relocked": "Relocked",
+              "left_open": "Left open",
+              "closed": "Closed",
+              "forced": "Forced",
+              "other": "Other"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "software_version": { "name": "Software version" },
+      "active_users": { "name": "Active users" },
+      "total_users": { "name": "Total users" },
+      "total_devices": { "name": "Total devices" },
+      "unacknowledged_alarms": { "name": "Unacknowledged alarms" },
+      "offline_devices": { "name": "Offline devices" },
+      "last_contact": { "name": "Last contact" },
+      "firmware": { "name": "Firmware" },
+      "ip_address": { "name": "IP address" },
+      "battery_charge": { "name": "Battery charge (raw)" },
+      "battery_state": { "name": "Battery state (raw)" },
+      "psu_state": { "name": "PSU power state (raw)" }
+    }
+  },
+  "exceptions": {
+    "invalid_auth": { "message": "The Paxton10 server rejected the stored credentials." },
+    "cannot_connect": { "message": "Can't connect to the Paxton10 server: {error}" },
+    "door_gone": { "message": "This door is no longer on the Paxton10 server." },
+    "door_control_off": { "message": "Door control is off in the Paxton10 options." },
+    "door_forbidden": { "message": "The Paxton account isn't allowed to open {door}." },
+    "door_failed": { "message": "Couldn't open {door}: {error}" }
+  },
+  "issues": {
+    "using_fallback_route": {
+      "title": "Paxton10 is using the fallback route",
+      "description": "The configured {primary} route failed, so Home Assistant is connected over {active}. Check the network path to the Paxton10 server. This message clears when the {primary} route works again."
+    }
+  }
+}

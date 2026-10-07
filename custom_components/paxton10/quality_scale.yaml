@@ -1,0 +1,85 @@
+# Home Assistant integration quality scale, self-assessed against the 2026.10 checklist.
+# Custom integrations can't be certified, so this records the status of every rule and the
+# reason for each exemption. Target: Gold, plus the Platinum typing rules.
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: No service actions. Door release is a button entity.
+  appropriate-polling: done  # devices 30 s, events 10 s, both configurable; hourly rediscovery
+  brands:
+    status: exempt
+    comment: Needs Paxton's logo, which is their trademark. Add brand images if the owner wants them.
+  common-modules: done  # coordinator.py, entity.py, connection.py, models.py
+  config-flow-test-coverage: done
+  config-flow: done  # data_description on every field
+  dependency-transparency:
+    status: exempt
+    comment: >-
+      The client (api.py) ships inside the integration. It wraps a private, undocumented
+      web-UI API for one site and has no PyPI package. requirements is empty; aiohttp ships with HA.
+  docs-actions:
+    status: exempt
+    comment: No service actions.
+  docs-triggers:
+    status: exempt
+    comment: No triggers. Automations use the paxton10_event bus event or the door event entities.
+  docs-conditions:
+    status: exempt
+    comment: No conditions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  entity-event-setup: done  # event entities subscribe in async_added_to_hass
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done  # SiteId from System/Parameters
+
+  # Silver
+  action-exceptions: done  # button presses raise translated HomeAssistantError
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done  # the coordinator logs once on failure and once on recovery
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done  # 99% across all modules
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery-update-info:
+    status: exempt
+    comment: No discovery (see discovery).
+  discovery:
+    status: exempt
+    comment: >-
+      The Paxton10 server isn't known to announce itself over mDNS, SSDP, DHCP, or zeroconf.
+      Revisit if a network capture shows an announcement.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices: done  # hourly rediscovery adds new doors and devices
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default: done  # IP address and last contact
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues: done  # fallback route in use
+  stale-devices: done  # removed on rediscovery; manual removal allowed once gone from the server
+
+  # Platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing: done  # mypy --strict passes
