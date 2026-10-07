@@ -364,7 +364,7 @@ async def test_web_app_event_types_and_reader(hass: HomeAssistant, server: FakeS
     entry = await setup(hass)
     fired = capture(hass)
     exit_reader = {"InformationTranslationKey": 530004, "Parameters": [{"Value": 541135, "Description": ""}]}
-    release = {"InformationTranslationKey": 530058, "Parameters": [{"Value": 545000, "Description": "Core 5"}]}
+    release = {"InformationTranslationKey": 530058, "Parameters": [{"Value": 545000, "Description": "Reception"}]}
     server.events += [
         {**LIVE_ROW, "EventId": "a" * 24, "EventTypeId": 5, "CategoryId": 1, "TranslatableFields": exit_reader},
         {**LIVE_ROW, "EventId": "b" * 24, "EventTypeId": 145, "UserData": None},

@@ -237,12 +237,12 @@ async def test_events(hass: HomeAssistant, server: FakeServer) -> None:
 async def test_event_user_names_only_when_allowed(hass: HomeAssistant, server: FakeServer) -> None:
     fired = capture(hass)
     entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
-    server.events.append(event(101, 5, user={"FirstName": "Test", "Surname": "Resident"}))
+    server.events.append(event(101, 5, user={"FirstName": "Test", "Surname": "User"}))
     await source(entry).poll_events()
     await hass.async_block_till_done()
-    assert fired[0].data["user_name"] == "Test Resident"
+    assert fired[0].data["user_name"] == "Test User"
     st = hass.states.get(entity_id(hass, "event", 2001, "door_event") or "")
-    assert st and st.attributes["user_name"] == "Test Resident"
+    assert st and st.attributes["user_name"] == "Test User"
 
 
 async def test_empty_event_log(hass: HomeAssistant, server: FakeServer) -> None:
@@ -480,7 +480,7 @@ async def test_diagnostics(hass: HomeAssistant, server: FakeServer) -> None:
 async def test_logbook_lines(hass: HomeAssistant, server: FakeServer) -> None:
     fired = capture(hass)
     entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
-    server.events += [event(101, 5, user={"FirstName": "Test", "Surname": "Resident"}), event(102, 99), event(103, 7, door=4242), event(104, 6)]
+    server.events += [event(101, 5, user={"FirstName": "Test", "Surname": "User"}), event(102, 99), event(103, 7, door=4242), event(104, 6)]
     await source(entry).poll_events()
     await hass.async_block_till_done()
 
@@ -489,7 +489,7 @@ async def test_logbook_lines(hass: HomeAssistant, server: FakeServer) -> None:
     describe = describers[(DOMAIN, EVENT_PAXTON10)]
     door = entity_id(hass, "event", 2001, "door_event")
     assert [describe(e) for e in fired] == [
-        {"name": "Main Entrance Door", "message": "logged access permitted by Test Resident", "entity_id": door},
+        {"name": "Main Entrance Door", "message": "logged access permitted by Test User", "entity_id": door},
         {"name": "Main Entrance Door", "message": "logged Paxton event type 99", "entity_id": door},
         {"name": "Paxton10", "message": "logged opened by software", "entity_id": None},
         {"name": "Main Entrance Door", "message": "logged exit request", "entity_id": door},

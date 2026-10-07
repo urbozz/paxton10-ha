@@ -1,6 +1,6 @@
 # Paxton10 for Home Assistant
 
-This custom integration connects Home Assistant to a Paxton10 access control server. It shows the status of the door controllers and entry panels, fires an event for each door event in the Paxton log, and, if you turn it on, adds an **Open** button for each door and the car park gate.
+This custom integration connects Home Assistant to a Paxton10 access control server. It shows the status of the door controllers and entry panels, fires an event for each door event in the Paxton log, and, if you turn it on, adds an **Open** button for each door, gate, and barrier.
 
 It uses the Paxton10 web app's internal API. Paxton doesn't document or support that API, so a Paxton software upgrade can break the integration. It was built against Paxton10 4.11 SR1 (`4.11.9753.20528`).
 
@@ -169,13 +169,13 @@ actions:
       message: "{{ trigger.event.data.door_name }} was forced open"
 ```
 
-Open the car park gate from a dashboard button or an automation (needs **Allow door control**):
+Open a gate from a dashboard button or an automation (needs **Allow door control**):
 
 ```yaml
 actions:
   - action: button.press
     target:
-      entity_id: button.car_park_vehicle_gate_open
+      entity_id: button.vehicle_gate_open
 ```
 
 Alert when a controller goes offline:

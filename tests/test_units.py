@@ -196,7 +196,7 @@ async def test_setup_auth_failure_on_first_event_poll(hass: HomeAssistant, serve
 
 
 def test_name_hardware() -> None:
-    doors = {7: Door(7, "Core 3 Door", 1, 1, 1, None)}
+    doors = {7: Door(7, "Rear Door", 1, 1, 1, None)}
 
     def dev(entity_id: int, kind: str, name: str, serial: str | None, door_ids: tuple[int, ...] = ()) -> Device:
         return Device(entity_id, kind, name, "m", serial, None, None, 1, None, door_ids=door_ids)
@@ -204,16 +204,16 @@ def test_name_hardware() -> None:
     devices = {
         1: dev(1, KIND_CONTROLLER, "Paxton10 Door Controller", "111", (7,)),
         2: dev(2, KIND_CONTROLLER, "Paxton10 Door Controller", "222"),
-        3: dev(3, KIND_ENTRY_PANEL, "Core 3", "333", (7,)),
+        3: dev(3, KIND_ENTRY_PANEL, "Rear", "333", (7,)),
         4: dev(4, KIND_ENTRY_PANEL, "7507256", "7507256"),  # unnamed: Paxton reports the serial
         5: dev(5, KIND_ENTRY_PANEL, "8075329", None),
         6: dev(6, KIND_ENTRY_PANEL, "Reception", "666"),
     }
     name_hardware(devices, doors)
     assert {k: d.name for k, d in devices.items()} == {
-        1: "Core 3 Door controller",
+        1: "Rear Door controller",
         2: "Controller 2",
-        3: "Core 3 Door entry panel",
+        3: "Rear Door entry panel",
         4: "Entry panel 4",
         5: "Entry panel 5",
         6: "Reception",
