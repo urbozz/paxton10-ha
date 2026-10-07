@@ -206,7 +206,7 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - The API is undocumented and can change with any Paxton upgrade.
 - Updates are polled. A door event can take up to the event interval to appear.
 - If more than 50 events happen between two polls, only the newest 50 are fired.
-- The event poll's filter body and the user name field come from the web app's code. They haven't been checked against a live response yet. If events don't arrive, see [Troubleshooting](#troubleshooting).
+- Intercom events (`intercom_unlocked`, `call_made`, and `call_not_answered`) don't carry the flat in `user_name`. Paxton puts the flat in a different field, which the integration doesn't read yet.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
 - The controller list is large (about 57 KB per controller) because Paxton includes every input and output. With 10 controllers at the default 30 s interval, that's about 1.6 GB a day on the local network. Raise the device status interval if that matters.
 - The server isn't discovered automatically. Enter its address yourself.
@@ -231,6 +231,8 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 | Fewer entities than expected | The account may lack permission for devices or the summary. Try an administrator account to compare. |
 | No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
 | **Paxton10 is using the fallback route** repair | The main route failed. Check the network path. The repair clears itself once the main route works again. |
+
+For more answers, see the [FAQ](https://github.com/urbozz/paxton10-ha/wiki/FAQ) in the wiki.
 
 Debug logging:
 
