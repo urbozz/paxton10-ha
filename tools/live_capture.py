@@ -46,7 +46,7 @@ from paxton10.hub import (
     LongPollHub,
     event_rows,
 )
-from paxton10.models import event_filter, parse_event, parse_time
+from paxton10.models import live_event_filter, parse_event, parse_time
 
 KEEP = {"$type", "H", "M", "EventTime", "Response"}
 
@@ -116,8 +116,19 @@ async def run(args: argparse.Namespace) -> int:
         hub = RecordingHub(session, transport.base_url, lambda: client.token, log=log)
         try:
             await hub.connect()
-            result = await hub.invoke(METHOD_SUBSCRIBE_EVENTS, event_filter(offset))
-            print(f"\nSubscribed (result {shape(result)}). Listening for {args.seconds} s. Open a door now.\n")
+            # Try the web app's live view filter first, then the site graphic's (every category listed).
+            for all_categories in (False, True):
+                label = "every category listed" if all_categories else "categories unrestricted"
+                try:
+                    result = await hub.invoke(METHOD_SUBSCRIBE_EVENTS, live_event_filter(offset, all_categories))
+                except PaxtonError as err:
+                    print(f"\nSubscribe with {label} failed: {err}")
+                    continue
+                print(f"\nSubscribed with {label} (result {shape(result)}).")
+                break
+            else:
+                raise PaxtonError("every subscribe variant failed")
+            print(f"Listening for {args.seconds} s. Open a door now.\n")
             deadline = time.monotonic() + args.seconds
             while time.monotonic() < deadline:
                 try:

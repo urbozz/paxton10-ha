@@ -309,3 +309,34 @@ def event_filter(utc_offset_minutes: int) -> dict[str, Any]:
         "Video": False,
         "ClusterIds": None,
     }
+
+
+# Event grid column ids in the 4.11 web app (gridHelpers): userName 0, where 2, info 4, time 6, entityIconId 11.
+LIVE_EVENT_COLUMNS = [6, 0, 2, 4, 11]
+# DMSEventCategory: every category the event log has (valid access through acknowledged alarms).
+ALL_EVENT_CATEGORIES = list(range(1, 10))
+
+
+def live_event_filter(utc_offset_minutes: int, all_categories: bool = False) -> dict[str, Any]:
+    """The filter the web UI passes to the hub's SubscribeToLiveEvents.
+
+    Unlike the REST event query, the hub only accepts column ids as numbers.
+    EventCategoryIds None means no restriction, as in the web app's LiveEventsHub defaults.
+    """
+    suffix = offset_suffix(utc_offset_minutes)
+    return {
+        "SortDirection": "Desc",
+        "OrderBy": "EventTime",
+        "OrderByCustomField": None,
+        "StandardEventColumns": list(LIVE_EVENT_COLUMNS),
+        "EventTypeIds": None,
+        "CustomDataIds": [],
+        "UserIds": None,
+        "AlarmEventsFirst": False,
+        "ApplianceIds": None,
+        "StartTimeWithOffset": f"2000-01-01T00:00:00.000{suffix}",
+        "EndTimeWithOffset": f"3000-01-01T00:00:00.000{suffix}",
+        "IsTimeRangeSelected": False,
+        "EventCategoryIds": list(ALL_EVENT_CATEGORIES) if all_categories else None,
+        "Video": False,
+    }
