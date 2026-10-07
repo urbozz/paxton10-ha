@@ -6,7 +6,7 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 ## Prerequisites
 
-- Home Assistant 2026.10 or later.
+- Home Assistant 2026.10 or later, including the 2026.10 betas.
 - A network path from Home Assistant to the Paxton10 server (Direct), or Paxton remote access turned on for the site (Remote).
 - A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs.
 
