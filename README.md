@@ -1,5 +1,7 @@
 # Paxton10 for Home Assistant
 
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=urbozz&repository=paxton10-ha&category=integration)
+
 This custom integration connects Home Assistant to a Paxton10 access control server. It shows the status of the door controllers and entry panels, fires an event for each door event in the Paxton log, and, if you turn it on, adds an **Open** button for each door, gate, and barrier.
 
 It uses the Paxton10 web app's internal API. Paxton doesn't document or support that API, so a Paxton software upgrade can break the integration. It was built against Paxton10 4.11 SR1 (`4.11.9753.20528`).
@@ -12,16 +14,19 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 ## Install
 
-### Manual
-
-1. Copy `custom_components/paxton10` into the `custom_components` folder in your Home Assistant configuration folder.
-2. Restart Home Assistant.
-
 ### HACS
 
-1. In HACS, open the menu, then click **Custom repositories**.
-2. Add this repository's URL with the type **Integration**.
-3. Install **Paxton10**, then restart Home Assistant.
+1. Click the **Open in HACS** badge at the top of this page. It opens this repository in your Home Assistant's HACS.
+
+   Alternatively, in HACS, open the menu, then click **Custom repositories**. Add this repository's URL with the type **Integration**.
+2. Click **Download**, then restart Home Assistant.
+
+HACS offers published releases only, not the latest code on `main`.
+
+### Manual
+
+1. Download the latest [release](https://github.com/urbozz/paxton10-ha/releases/latest), and copy its `custom_components/paxton10` folder into the `custom_components` folder in your Home Assistant configuration folder.
+2. Restart Home Assistant.
 
 ## Set up
 
