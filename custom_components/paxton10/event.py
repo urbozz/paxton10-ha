@@ -42,6 +42,8 @@ class DoorEventEntity(DoorEntity, EventEntity):
         attributes: dict[str, object] = {"event_id": event.event_id, "event_type_id": event.event_type_id}
         if event.time:
             attributes["time"] = event.time.isoformat()
+        if event.reader:
+            attributes["reader"] = event.reader
         if self.coordinator.options.include_user_names and event.user_name:
             attributes["user_name"] = event.user_name
         self._trigger_event(event.event_type, attributes)

@@ -23,7 +23,14 @@ from .entity import (
     add_entities_dynamically,
     server_device_info,
 )
-from .models import BATTERY_CHARGE, BATTERY_STATE, KIND_CONTROLLER, POWER_SUPPLY, Device
+from .models import (
+    BATTERY_CHARGE,
+    BATTERY_STATE,
+    KIND_CONTROLLER,
+    POWER_SUPPLY,
+    Device,
+    battery_level,
+)
 
 PARALLEL_UPDATES = 0
 
@@ -68,7 +75,7 @@ DEVICE_SENSORS: tuple[DeviceDescription, ...] = (
         options=list(BATTERY_CHARGE.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
         controllers_only=True,
-        value=lambda d: _mapped(BATTERY_CHARGE, d.battery_charge),
+        value=lambda d: battery_level(d.battery_charge, d.battery_state),
     ),
     DeviceDescription(
         key="battery_state",
@@ -76,8 +83,7 @@ DEVICE_SENSORS: tuple[DeviceDescription, ...] = (
         options=list(BATTERY_STATE.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
         controllers_only=True,
-        # Without a battery the controller still reports a state (charging on GEN1, 0 on GEN2). It means nothing.
-        value=lambda d: None if d.battery_charge == 0 else _mapped(BATTERY_STATE, d.battery_state),
+        value=lambda d: _mapped(BATTERY_STATE, d.battery_state),
     ),
     DeviceDescription(
         key="power_supply",

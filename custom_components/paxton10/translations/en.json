@@ -153,6 +153,10 @@
         "state_attributes": {
           "event_type": {
             "state": {
+              "unknown_credential": "Unknown credential",
+              "lost_credential": "Lost credential",
+              "access_not_made": "Access not made",
+              "no_permission": "No permission",
               "access_permitted": "Access permitted",
               "exit_request": "Exit request",
               "opened_by_software": "Opened by software",
@@ -161,6 +165,11 @@
               "left_open": "Left open",
               "closed": "Closed",
               "forced": "Forced",
+              "toggled_open": "Toggled open",
+              "toggled_closed": "Toggled closed",
+              "intercom_unlocked": "Unlocked by intercom",
+              "call_not_answered": "Call not answered",
+              "call_made": "Call made",
               "other": "Other"
             }
           }

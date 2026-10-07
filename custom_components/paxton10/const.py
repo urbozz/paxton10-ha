@@ -35,15 +35,27 @@ LOCK_ACTOR = 1002  # actorIds.lockOut in the web app
 # Appliance types that are doors in this sense: door, gate, barrier.
 DOOR_APPLIANCE_TYPES = (1, 2, 3)
 
-# EventTypeId values from the Paxton10 web app. Not the CategoryId values.
+# EventTypeId values from the Paxton10 web app's DMSEventType enum. Not the CategoryId values.
+# The intercom types (14x) aren't in the enum: they were read from a live 4.11 event log.
 EVENT_TYPES: dict[int, str] = {
+    1: "unknown_credential",  # credNotFound: "Access denied - Unknown credential"
+    2: "lost_credential",  # credLost
+    3: "access_not_made",  # accessNotMade
+    4: "no_permission",  # noPermission
     5: "access_permitted",
     6: "exit_request",  # "Valid exit request at Door": the exit button
-    7: "opened_by_software",
-    8: "unlocked",
-    9: "relocked",
+    7: "opened_by_software",  # "Door unlocked from software" or "Gate unlocked from software"
+    8: "unlocked",  # timedUnlock
+    9: "relocked",  # timedRelock
     10: "left_open",
     11: "closed",
     16: "forced",
+    17: "toggled_open",  # toggleOpen
+    18: "toggled_closed",  # toggleClose
+    140: "intercom_unlocked",  # "Door unlocked by <flat>"
+    142: "call_not_answered",  # "Call not answered by <flat>"
+    145: "call_made",  # "Call made from <panel> to <flat>"
 }
+# TranslatableFields parameter values on access events: "[Entry reader]" and "[Exit reader]".
+READERS: dict[int, str] = {541134: "entry", 541135: "exit"}
 EVENT_TYPE_OTHER = "other"

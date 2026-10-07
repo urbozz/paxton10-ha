@@ -359,6 +359,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
                 "entity_id": ha_entity_id,
                 "device_id": ha_device_id,
                 "time": event.time.isoformat() if event.time else None,
+                "reader": event.reader,
             }
             if self.options.include_user_names:
                 data["user_name"] = event.user_name

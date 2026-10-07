@@ -359,6 +359,30 @@ async def test_issue10_live_event_shape(hass: HomeAssistant, server: FakeServer)
     assert "user_name" not in fired[0].data
 
 
+async def test_web_app_event_types_and_reader(hass: HomeAssistant, server: FakeServer) -> None:
+    """Live 4.11 shapes: an exit reader access, an intercom call, no answer, and release, and a denial."""
+    entry = await setup(hass)
+    fired = capture(hass)
+    exit_reader = {"InformationTranslationKey": 530004, "Parameters": [{"Value": 541135, "Description": ""}]}
+    release = {"InformationTranslationKey": 530058, "Parameters": [{"Value": 545000, "Description": "Core 5"}]}
+    server.events += [
+        {**LIVE_ROW, "EventId": "a" * 24, "EventTypeId": 5, "CategoryId": 1, "TranslatableFields": exit_reader},
+        {**LIVE_ROW, "EventId": "b" * 24, "EventTypeId": 145, "UserData": None},
+        {**LIVE_ROW, "EventId": "c" * 24, "EventTypeId": 142, "UserData": None},
+        {**LIVE_ROW, "EventId": "d" * 24, "EventTypeId": 140, "UserData": None, "TranslatableFields": release},
+        {**LIVE_ROW, "EventId": "e" * 24, "EventTypeId": 1, "UserData": None},
+    ]
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+    assert {e.data["event_id"][0]: (e.data["event_type"], e.data["reader"]) for e in fired} == {
+        "a": ("access_permitted", "exit"),
+        "b": ("call_made", None),
+        "c": ("call_not_answered", None),
+        "d": ("intercom_unlocked", None),
+        "e": ("unknown_credential", None),
+    }
+
+
 async def test_issue10_seen_ids_are_bounded(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
     from collections import deque
 

@@ -93,7 +93,7 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 | Controller and entry panel | Connectivity (binary sensor) | Diagnostic. |
 | Controller and entry panel | Firmware | Diagnostic. |
 | Controller and entry panel | IP address | Diagnostic. Disabled by default. |
-| Controller | Battery | Diagnostic. `good`, `low`, `critical`, or `not_connected` (no battery fitted). |
+| Controller | Battery | Diagnostic. `good`, `low`, `critical`, or `not_connected` (no battery fitted). Matches the web app's battery icon, so a fitted battery that reports no charge shows its charging state as `low` (charging) or `critical` (discharging). |
 | Controller | Battery state | Diagnostic. `charging` or `discharging`. |
 | Controller | Power supply | Diagnostic. `external` (mains) or `failure` (running on battery). |
 
@@ -107,7 +107,8 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 
 | Field | Description |
 |---|---|
-| `event_type` | `access_permitted`, `exit_request` (someone pressed the exit button), `opened_by_software`, `unlocked`, `relocked`, `left_open`, `closed`, `forced`, or `other`. |
+| `event_type` | See [Event types](#event-types). `other` for a type the integration doesn't know, with Paxton's number in `event_type_id`. |
+| `reader` | `entry` or `exit`: which reader an `access_permitted` event came from. `null` for other events. |
 | `event_type_id` | Paxton's numeric event type. |
 | `event_id` | Paxton's event ID, a 24-character string. It doesn't sort by time. |
 | `entity_id`, `device_id` | The door's event entity and device in Home Assistant. Use these in automations. Both are `null` for events that aren't about a known door. |
@@ -115,6 +116,28 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `time` | When the event happened, in ISO 8601 format. |
 | `user_name` | Only when **Include user names in events** is on. |
 | `config_entry_id` | The integration entry the event came from. |
+
+### Event types
+
+| `event_type` | Paxton type | What happened |
+|---|---|---|
+| `access_permitted` | 5 | A credential opened the door. `reader` says whether it was the entry or exit reader. |
+| `exit_request` | 6 | Someone pressed the exit button. |
+| `opened_by_software` | 7 | An operator, Home Assistant, or an intercom release opened the door from software. |
+| `unknown_credential` | 1 | Access denied: the credential isn't known. |
+| `lost_credential` | 2 | Access denied: the credential is marked lost. |
+| `no_permission` | 4 | Access denied: the user has no permission for this door at this time. |
+| `access_not_made` | 3 | Access was granted, but the door wasn't opened. |
+| `intercom_unlocked` | 140 | A flat unlocked the door from the intercom. |
+| `call_made` | 145 | Someone called a flat from the entry panel. |
+| `call_not_answered` | 142 | The flat didn't answer. |
+| `unlocked`, `relocked` | 8, 9 | A time profile unlocked or relocked the door. |
+| `toggled_open`, `toggled_closed` | 17, 18 | The door was toggled open or closed. |
+| `left_open` | 10 | The door was left open. |
+| `closed` | 11 | The door closed. |
+| `forced` | 16 | The door was forced open. |
+
+The numbers come from the Paxton10 4.11 web app, except the intercom types, which were read from a live event log. Types 2, 3, 4, 17, and 18 haven't been seen live yet, so their descriptions follow the web app's names for them.
 
 Events from before Home Assistant started are never replayed.
 

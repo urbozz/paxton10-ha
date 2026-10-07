@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from .const import EVENT_TYPE_OTHER, EVENT_TYPES
+from .const import EVENT_TYPE_OTHER, EVENT_TYPES, READERS
 
 KIND_CONTROLLER = "controller"
 KIND_ENTRY_PANEL = "entry_panel"
@@ -19,6 +19,16 @@ KIND_ENTRY_PANEL = "entry_panel"
 BATTERY_CHARGE: dict[int, str] = {0: "not_connected", 1: "critical", 2: "low", 3: "good"}
 BATTERY_STATE: dict[int, str] = {1: "discharging", 2: "charging"}
 POWER_SUPPLY: dict[int, str] = {1: "failure", 2: "external"}
+
+
+
+def battery_level(charge: int | None, state: int | None) -> str | None:
+    # The web app's icon rule, `Charge || State || NotConnected` read as a BatteryCharge. A fitted battery
+    # can report Charge 0 with State 2 (charging): the web app shows Low, and State 1 (discharging) Critical.
+    if charge == 0 and state:
+        charge = state
+    return BATTERY_CHARGE.get(charge) if charge is not None else None
+
 
 # System/Summary descriptions mapped to sensor keys.
 SUMMARY_KEYS: dict[str, str] = {
@@ -103,6 +113,7 @@ class DoorEvent:
     time: datetime | None
     door_ids: tuple[int, ...]
     user_name: str | None
+    reader: str | None = None  # entry or exit, on access events
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -238,7 +249,17 @@ def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
         time=parse_time(raw.get("EventTime")),
         door_ids=_event_door_ids(raw),
         user_name=_user_name(raw.get("UserData")) if include_user else None,
+        reader=_reader(raw),
     )
+
+
+def _reader(raw: dict[str, Any]) -> str | None:
+    fields = raw.get("TranslatableFields")
+    params = fields.get("Parameters") if isinstance(fields, dict) else None
+    for param in params if isinstance(params, list) else []:
+        if isinstance(param, dict) and (reader := READERS.get(param.get("Value"))):  # type: ignore[arg-type]
+            return reader
+    return None
 
 
 def _user_name(user_data: Any) -> str | None:
