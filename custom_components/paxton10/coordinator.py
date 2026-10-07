@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
@@ -336,8 +337,18 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
     @callback
     def _fire(self, event: DoorEvent) -> None:
         doors = self.data.doors
+        ent_reg = er.async_get(self.hass)
         targets: list[int | None] = [d for d in event.door_ids if d in doors] or [None]
         for door_id in targets:
+            # Home Assistant IDs for the door, so automations and the logbook can link to it.
+            # door_entity_id stays the Paxton ID for existing automations.
+            ha_entity_id = ha_device_id = None
+            if door_id is not None and (
+                entry := ent_reg.async_get_entity_id("event", DOMAIN, f"{self.site_id}_{door_id}_door_event")
+            ):
+                ha_entity_id = entry
+                if reg_entry := ent_reg.async_get(entry):
+                    ha_device_id = reg_entry.device_id
             data: dict[str, Any] = {
                 "config_entry_id": self.config_entry.entry_id,
                 "event_id": event.event_id,
@@ -345,6 +356,8 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
                 "event_type_id": event.event_type_id,
                 "door_entity_id": door_id,
                 "door_name": doors[door_id].name if door_id is not None else None,
+                "entity_id": ha_entity_id,
+                "device_id": ha_device_id,
                 "time": event.time.isoformat() if event.time else None,
             }
             if self.options.include_user_names:

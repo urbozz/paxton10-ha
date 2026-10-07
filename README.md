@@ -110,12 +110,15 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `event_type` | `access_permitted`, `opened_by_software`, `unlocked`, `relocked`, `left_open`, `closed`, `forced`, or `other`. |
 | `event_type_id` | Paxton's numeric event type. |
 | `event_id` | Paxton's event ID, a 24-character string. It doesn't sort by time. |
-| `door_entity_id`, `door_name` | The Paxton door. Both are `null` for events that aren't about a known door. |
+| `entity_id`, `device_id` | The door's event entity and device in Home Assistant. Use these in automations. Both are `null` for events that aren't about a known door. |
+| `door_entity_id`, `door_name` | The door's numeric ID and name in Paxton. Both are `null` for events that aren't about a known door. |
 | `time` | When the event happened, in ISO 8601 format. |
 | `user_name` | Only when **Include user names in events** is on. |
 | `config_entry_id` | The integration entry the event came from. |
 
 Events from before Home Assistant started are never replayed.
+
+Each event also appears in **Logbook**, and in the door's **Activity** on its device page, for example "Carpark Gate logged access permitted by Alex Smith". The user's name appears only when **Include user names in events** is on.
 
 ## How data updates
 

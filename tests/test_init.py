@@ -30,6 +30,7 @@ from custom_components.paxton10.const import (
 )
 from custom_components.paxton10.coordinator import Paxton10Coordinator
 from custom_components.paxton10.diagnostics import async_get_config_entry_diagnostics
+from custom_components.paxton10.logbook import async_describe_events
 from custom_components.paxton10.source import PollingSource, SourceUpdate
 
 from .conftest import SITE_ID, FakeServer, controller, eid, entity_id, event, make_entry
@@ -208,6 +209,14 @@ async def test_events(hass: HomeAssistant, server: FakeServer) -> None:
         (eid(104), "opened_by_software", None),  # unknown door
     ]
     assert fired[0].data["door_name"] == "Main Entrance Door"
+    # Home Assistant IDs sit alongside the Paxton ID, for automations and the logbook.
+    door_event = entity_id(hass, "event", 2001, "door_event")
+    reg_entry = er.async_get(hass).async_get(door_event or "")
+    door_device = dr.async_get(hass).async_get(reg_entry.device_id if reg_entry and reg_entry.device_id else "")
+    assert door_device and (DOMAIN, f"{SITE_ID}_2001") in door_device.identifiers
+    assert fired[0].data["entity_id"] == door_event
+    assert fired[0].data["device_id"] == door_device.id
+    assert fired[3].data["entity_id"] is None and fired[3].data["device_id"] is None
     assert fired[0].data["time"] == "2026-10-07T14:00:00.123000+01:00"
     assert "user_name" not in fired[0].data
     ent = entity_id(hass, "event", 2001, "door_event")
@@ -466,3 +475,21 @@ async def test_diagnostics(hass: HomeAssistant, server: FakeServer) -> None:
     assert diag["active_route"] == "direct"
     assert diag["last_event_id"] == eid(100)
     assert len(diag["doors"]) == 2
+
+
+async def test_logbook_lines(hass: HomeAssistant, server: FakeServer) -> None:
+    fired = capture(hass)
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
+    server.events += [event(101, 5, user={"FirstName": "Test", "Surname": "Resident"}), event(102, 6), event(103, 7, door=4242)]
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+
+    describers: dict[tuple[str, str], Any] = {}
+    async_describe_events(hass, lambda domain, event_type, fn: describers.__setitem__((domain, event_type), fn))
+    describe = describers[(DOMAIN, EVENT_PAXTON10)]
+    door = entity_id(hass, "event", 2001, "door_event")
+    assert [describe(e) for e in fired] == [
+        {"name": "Main Entrance Door", "message": "logged access permitted by Test Resident", "entity_id": door},
+        {"name": "Main Entrance Door", "message": "logged Paxton event type 6", "entity_id": door},
+        {"name": "Paxton10", "message": "logged opened by software", "entity_id": None},
+    ]
