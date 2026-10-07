@@ -27,7 +27,7 @@ async def async_setup_entry(
 
 
 class DoorEventEntity(DoorEntity, EventEntity):
-    _attr_event_types = [*EVENT_TYPES.values(), EVENT_TYPE_OTHER]
+    _attr_event_types = [*EVENT_TYPES.values(), EVENT_TYPE_OTHER]  # noqa: RUF012
 
     def __init__(self, coordinator: Paxton10Coordinator, door: Door) -> None:
         super().__init__(coordinator, door, "door_event")

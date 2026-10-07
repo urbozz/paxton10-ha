@@ -14,6 +14,7 @@ and only sends POST or PUT to paths on WRITE_ALLOWLIST or READ_POSTS.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -165,10 +166,9 @@ class RemoteTransport:
     async def close(self) -> None:
         if self._reader:
             self._reader.cancel()
-            try:
+            # A reader that already died still gets the cleanup below.
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._reader
-            except (asyncio.CancelledError, Exception):
-                pass  # a reader that already died still gets the cleanup below
             self._reader = None
         self._fail_pending()
         if self._ws and not self._ws.closed:
@@ -185,7 +185,7 @@ class RemoteTransport:
         assert self._ws
         try:
             await self._read_frames()
-        except Exception as err:  # receive timeout, dropped connection, or a malformed frame
+        except Exception as err:  # noqa: BLE001  # receive timeout, dropped connection, or a malformed frame
             _LOGGER.debug("Remote relay connection lost: %s", err)
         finally:
             # Fail waiting calls first, so they don't wait for the websocket close handshake.

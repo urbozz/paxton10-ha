@@ -6,14 +6,24 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import Paxton10ConfigEntry, Paxton10Coordinator
-from .entity import HardwareEntity, Paxton10Entity, add_entities_dynamically, server_device_info
+from .entity import (
+    HardwareEntity,
+    Paxton10Entity,
+    add_entities_dynamically,
+    server_device_info,
+)
 from .models import KIND_CONTROLLER, Device
 
 PARALLEL_UPDATES = 0

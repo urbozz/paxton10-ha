@@ -7,9 +7,7 @@ rules:
     status: exempt
     comment: No service actions. Door release is a button entity.
   appropriate-polling: done  # devices 30 s, events 10 s, both configurable; hourly rediscovery
-  brands:
-    status: exempt
-    comment: Needs Paxton's logo, which is their trademark. Add brand images if the owner wants them.
+  brands: done  # brand/icon.png and icon@2x.png: Paxton's triangle mark, redrawn from paxton-access.com
   common-modules: done  # coordinator.py, entity.py, connection.py, models.py
   config-flow-test-coverage: done
   config-flow: done  # data_description on every field

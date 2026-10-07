@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Self
 from unittest.mock import MagicMock
 
 import aiohttp
@@ -155,10 +155,10 @@ class FakeResp:
     async def json(self, content_type: Any = None) -> dict[str, Any]:
         return self._body
 
-    async def __aenter__(self) -> FakeResp:
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, *args: Any) -> None:
+    async def __aexit__(self, *args: object) -> None:
         return None
 
 

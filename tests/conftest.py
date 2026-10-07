@@ -14,7 +14,12 @@ from unittest.mock import patch
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.paxton10.api import PaxtonClient, PaxtonError, Response, password_hash
+from custom_components.paxton10.api import (
+    PaxtonClient,
+    PaxtonError,
+    Response,
+    password_hash,
+)
 from custom_components.paxton10.const import (
     CONF_PASSWORD_HASH,
     CONF_ROUTE,

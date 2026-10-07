@@ -15,7 +15,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 
-from custom_components.paxton10.api import RECORD_SEPARATOR, PaxtonError, RemoteTransport
+from custom_components.paxton10.api import (
+    RECORD_SEPARATOR,
+    PaxtonError,
+    RemoteTransport,
+)
 from custom_components.paxton10.const import (
     DOMAIN,
     OPT_ALLOW_DOOR_CONTROL,

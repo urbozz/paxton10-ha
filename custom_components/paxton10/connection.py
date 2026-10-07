@@ -6,6 +6,7 @@ No Home Assistant imports, so it can be tested and reused on its own.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -116,19 +117,15 @@ class PaxtonConnection:
         async with self._lock:
             old, self._client, self.active_route = self._client, probe, route
         if old:
-            try:
+            with contextlib.suppress(Exception):
                 await old.close()
-            except Exception:
-                pass
         _LOGGER.info("Paxton10 is back on the %s route", route)
         return True
 
     async def _drop(self) -> None:
         if self._client:
-            try:
+            with contextlib.suppress(Exception):
                 await self._client.close()
-            except Exception:
-                pass
         self._client, self.active_route = None, None
 
     async def close(self) -> None:

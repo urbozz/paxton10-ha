@@ -10,7 +10,12 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
-from custom_components.paxton10.api import PaxtonAuthError, PaxtonBlockedRequest, PaxtonError, password_hash
+from custom_components.paxton10.api import (
+    PaxtonAuthError,
+    PaxtonBlockedRequest,
+    PaxtonError,
+    password_hash,
+)
 from custom_components.paxton10.connection import PaxtonConnection
 from custom_components.paxton10.discovery import discover_site, read_doors, read_server
 from custom_components.paxton10.models import (
