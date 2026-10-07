@@ -117,8 +117,11 @@ class DirectTransport:
                 timeout=aiohttp.ClientTimeout(total=20),
             ) as resp:
                 return Response(resp.status, _parse(await resp.text()))
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise PaxtonError(f"{method} {path}: {err}") from err
+        except asyncio.TimeoutError as err:
+            raise PaxtonError(f"{method} {path}: no reply from {self._base} within 20 s") from err
+        except aiohttp.ClientError as err:
+            # Some aiohttp errors have an empty str(), so always name the type.
+            raise PaxtonError(f"{method} {path}: {type(err).__name__}: {err}".rstrip(": ")) from err
 
 
 class RemoteTransport:

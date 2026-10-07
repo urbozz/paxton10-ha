@@ -66,6 +66,8 @@ async def test_direct_transport(hass: HomeAssistant, aioclient_mock: AiohttpClie
     aioclient_mock.get("https://192.0.2.1/plain", text="not json")
     aioclient_mock.get("https://192.0.2.1/expired", status=401)
     aioclient_mock.get("https://192.0.2.1/broken", exc=aiohttp.ClientError("boom"))
+    aioclient_mock.get("https://192.0.2.1/silent", exc=aiohttp.ClientError())
+    aioclient_mock.get("https://192.0.2.1/slow", exc=TimeoutError())
     client = create_client(async_get_clientsession(hass), "direct", "192.0.2.1", False)
     await client.sign_in("user@example.com", "password")
     assert client.token_expires_in == 43199
@@ -78,8 +80,13 @@ async def test_direct_transport(hass: HomeAssistant, aioclient_mock: AiohttpClie
     assert (await client.get("/plain")).body == "not json"
     with pytest.raises(PaxtonAuthError):
         await client.get("/expired")
-    with pytest.raises(PaxtonError, match="boom"):
+    with pytest.raises(PaxtonError, match="ClientError: boom"):
         await client.get("/broken")
+    # An exception with an empty str() still says what failed.
+    with pytest.raises(PaxtonError, match=r"GET /silent: ClientError$"):
+        await client.get("/silent")
+    with pytest.raises(PaxtonError, match=r"no reply from https://192\.0\.2\.1 within 20 s"):
+        await client.get("/slow")
     await client.close()
 
 
