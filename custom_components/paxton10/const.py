@@ -58,4 +58,9 @@ EVENT_TYPES: dict[int, str] = {
 }
 # TranslatableFields parameter values on access events: "[Entry reader]" and "[Exit reader]".
 READERS: dict[int, str] = {541134: "entry", 541135: "exit"}
+# Intercom events name the called user in a TranslatableFields parameter, not in UserData. The panel's
+# parameter looks the same (Value 0), so the text template's key says which position is the user:
+# 530058 "Door unlocked by <user>" (door, user), 530060 "Call not answered by <user>" (user, panel),
+# and 530083 "Call made from <panel> to <user>" (panel, user).
+INTERCOM_USER_PARAM: dict[int, int] = {530058: 1, 530060: 0, 530083: 1}
 EVENT_TYPE_OTHER = "other"

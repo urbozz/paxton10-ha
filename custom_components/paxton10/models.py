@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from .const import EVENT_TYPE_OTHER, EVENT_TYPES, READERS
+from .const import EVENT_TYPE_OTHER, EVENT_TYPES, INTERCOM_USER_PARAM, READERS
 
 KIND_CONTROLLER = "controller"
 KIND_ENTRY_PANEL = "entry_panel"
@@ -248,9 +248,20 @@ def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
         event_type=EVENT_TYPES.get(type_id, EVENT_TYPE_OTHER) if isinstance(type_id, int) else EVENT_TYPE_OTHER,
         time=parse_time(raw.get("EventTime")),
         door_ids=_event_door_ids(raw),
-        user_name=_user_name(raw.get("UserData")) if include_user else None,
+        user_name=(_user_name(raw.get("UserData")) or _intercom_user(raw)) if include_user else None,
         reader=_reader(raw),
     )
+
+
+def _intercom_user(raw: dict[str, Any]) -> str | None:
+    fields = raw.get("TranslatableFields")
+    if not isinstance(fields, dict) or (index := INTERCOM_USER_PARAM.get(fields.get("InformationTranslationKey"))) is None:  # type: ignore[arg-type]
+        return None
+    params = fields.get("Parameters")
+    if not isinstance(params, list) or len(params) <= index or not isinstance(params[index], dict):
+        return None
+    name = params[index].get("Description")
+    return name.strip() or None if isinstance(name, str) else None
 
 
 def _reader(raw: dict[str, Any]) -> str | None:
@@ -263,7 +274,7 @@ def _reader(raw: dict[str, Any]) -> str | None:
 
 
 def _user_name(user_data: Any) -> str | None:
-    # The UserData shape hasn't been seen in a live response yet. Accept the likely forms.
+    # Live 4.11 sends a dict with UserName. Accept the other likely forms too.
     if isinstance(user_data, list):
         user_data = user_data[0] if user_data else None
     if isinstance(user_data, str):

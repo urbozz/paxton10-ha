@@ -22,6 +22,7 @@ from custom_components.paxton10.api import (
 )
 from custom_components.paxton10.const import (
     DOMAIN,
+    EVENT_PAXTON10,
     OPT_ALLOW_DOOR_CONTROL,
     OPT_DEVICE_INTERVAL,
     OPT_EVENT_INTERVAL,
@@ -30,6 +31,7 @@ from custom_components.paxton10.const import (
     OPT_INCLUDE_USER_NAMES,
 )
 from custom_components.paxton10.diagnostics import async_get_config_entry_diagnostics
+from custom_components.paxton10.logbook import async_describe_events
 from custom_components.paxton10.source import SourceUpdate
 
 from .conftest import SITE_ID, FakeServer, controller, eid, entity_id, event
@@ -428,3 +430,57 @@ async def test_issue11_door_via_controller(hass: HomeAssistant, server: FakeServ
     await hass.async_block_till_done()
     door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
     assert door and door.via_device_id == srv.id
+
+
+async def test_intercom_events_name_the_called_user(hass: HomeAssistant, server: FakeServer) -> None:
+    """Live 4.11 intercom shapes: the panel and the user are both Value 0 parameters, in template order."""
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
+    fired = capture(hass)
+
+    def tf(key: int, *params: tuple[str, int]) -> dict[str, Any]:
+        return {"InformationTranslationKey": key, "Parameters": [{"Description": d, "Value": v} for d, v in params]}
+
+    server.events += [
+        {**LIVE_ROW, "EventId": "a" * 24, "EventTypeId": 140, "UserData": None,
+         "TranslatableFields": tf(530058, ("Reception", 545000), ("Alex Smith", 0))},
+        {**LIVE_ROW, "EventId": "b" * 24, "EventTypeId": 142, "UserData": None,
+         "TranslatableFields": tf(530060, ("Alex Smith", 0), ("7000001", 0))},
+        {**LIVE_ROW, "EventId": "c" * 24, "EventTypeId": 145, "UserData": None,
+         "TranslatableFields": tf(530083, ("7000001", 0), ("Alex Smith", 0))},
+        # A template we don't know, or a short parameter list, names nobody.
+        {**LIVE_ROW, "EventId": "d" * 24, "EventTypeId": 145, "UserData": None,
+         "TranslatableFields": tf(530083, ("7000001", 0))},
+        {**LIVE_ROW, "EventId": "e" * 24, "EventTypeId": 141, "UserData": None,
+         "TranslatableFields": tf(539999, ("Alex Smith", 0))},
+    ]
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+    assert {e.data["event_id"][0]: (e.data["event_type"], e.data["user_name"]) for e in fired} == {
+        "a": ("intercom_unlocked", "Alex Smith"),
+        "b": ("call_not_answered", "Alex Smith"),
+        "c": ("call_made", "Alex Smith"),
+        "d": ("call_made", None),
+        "e": ("other", None),
+    }
+
+    describers: dict[tuple[str, str], Any] = {}
+    async_describe_events(hass, lambda domain, event_type, fn: describers.__setitem__((domain, event_type), fn))
+    describe = describers[(DOMAIN, EVENT_PAXTON10)]
+    assert [describe(e)["message"] for e in fired[:3]] == [
+        "logged intercom unlocked by Alex Smith",
+        "logged call not answered by Alex Smith",
+        "logged call made to Alex Smith",
+    ]
+
+
+async def test_intercom_user_only_when_allowed(hass: HomeAssistant, server: FakeServer) -> None:
+    entry = await setup(hass)
+    fired = capture(hass)
+    server.events.append({
+        **LIVE_ROW, "EventId": "a" * 24, "EventTypeId": 145, "UserData": None,
+        "TranslatableFields": {"InformationTranslationKey": 530083,
+                               "Parameters": [{"Description": "7000001", "Value": 0}, {"Description": "Alex Smith", "Value": 0}]},
+    })
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+    assert "user_name" not in fired[0].data
