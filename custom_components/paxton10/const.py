@@ -38,6 +38,7 @@ DOOR_APPLIANCE_TYPES = (1, 2, 3)
 # EventTypeId values from the Paxton10 web app. Not the CategoryId values.
 EVENT_TYPES: dict[int, str] = {
     5: "access_permitted",
+    6: "exit_request",  # "Valid exit request at Door": the exit button
     7: "opened_by_software",
     8: "unlocked",
     9: "relocked",

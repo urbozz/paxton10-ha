@@ -107,7 +107,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 
 | Field | Description |
 |---|---|
-| `event_type` | `access_permitted`, `opened_by_software`, `unlocked`, `relocked`, `left_open`, `closed`, `forced`, or `other`. |
+| `event_type` | `access_permitted`, `exit_request` (someone pressed the exit button), `opened_by_software`, `unlocked`, `relocked`, `left_open`, `closed`, `forced`, or `other`. |
 | `event_type_id` | Paxton's numeric event type. |
 | `event_id` | Paxton's event ID, a 24-character string. It doesn't sort by time. |
 | `entity_id`, `device_id` | The door's event entity and device in Home Assistant. Use these in automations. Both are `null` for events that aren't about a known door. |

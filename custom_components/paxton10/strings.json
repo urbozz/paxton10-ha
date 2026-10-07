@@ -154,6 +154,7 @@
           "event_type": {
             "state": {
               "access_permitted": "Access permitted",
+              "exit_request": "Exit request",
               "opened_by_software": "Opened by software",
               "unlocked": "Unlocked",
               "relocked": "Relocked",
