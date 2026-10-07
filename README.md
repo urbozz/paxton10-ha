@@ -65,7 +65,7 @@ Open the integration and click **Configure**.
 | Event interval | 10 s | How often to read the event log. Minimum 5 s. |
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
-| Include user names in events | Off | Adds the user's name to door events. These are residents' names, which is personal data. |
+| Include user names in events | Off | Adds the user's name to door events. User names are personal data. |
 
 Changing an option reloads the integration.
 
@@ -128,9 +128,9 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `lost_credential` | 2 | Access denied: the credential is marked lost. |
 | `no_permission` | 4 | Access denied: the user has no permission for this door at this time. |
 | `access_not_made` | 3 | Access was granted, but the door wasn't opened. |
-| `intercom_unlocked` | 140 | A flat unlocked the door from the intercom. |
-| `call_made` | 145 | Someone called a flat from the entry panel. |
-| `call_not_answered` | 142 | The flat didn't answer. |
+| `intercom_unlocked` | 140 | The called user unlocked the door from their intercom. |
+| `call_made` | 145 | Someone called a user from the entry panel. |
+| `call_not_answered` | 142 | The called user didn't answer. |
 | `unlocked`, `relocked` | 8, 9 | A time profile unlocked or relocked the door. |
 | `toggled_open`, `toggled_closed` | 17, 18 | The door was toggled open or closed. |
 | `left_open` | 10 | The door was left open. |
@@ -141,7 +141,7 @@ The numbers come from the Paxton10 4.11 web app, except the intercom types, whic
 
 Events from before Home Assistant started are never replayed.
 
-Each event also appears in **Logbook**, and in the door's **Activity** on its device page, for example "Carpark Gate logged access permitted by Alex Smith". The user's name appears only when **Include user names in events** is on.
+Each event also appears in **Logbook**, and in the door's **Activity** on its device page, for example "Front Door logged access permitted by Alex Smith". The user's name appears only when **Include user names in events** is on.
 
 ## How data updates
 
@@ -206,7 +206,7 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - The API is undocumented and can change with any Paxton upgrade.
 - Updates are polled. A door event can take up to the event interval to appear.
 - If more than 50 events happen between two polls, only the newest 50 are fired.
-- Intercom events (`intercom_unlocked`, `call_made`, and `call_not_answered`) don't carry the flat in `user_name`. Paxton puts the flat in a different field, which the integration doesn't read yet.
+- Intercom events (`intercom_unlocked`, `call_made`, and `call_not_answered`) don't carry the called user in `user_name`. Paxton puts that user in a different field, which the integration doesn't read yet.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
 - The controller list is large (about 57 KB per controller) because Paxton includes every input and output. With 10 controllers at the default 30 s interval, that's about 1.6 GB a day on the local network. Raise the device status interval if that matters.
 - The server isn't discovered automatically. Enter its address yourself.

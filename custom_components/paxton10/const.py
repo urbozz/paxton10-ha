@@ -52,9 +52,9 @@ EVENT_TYPES: dict[int, str] = {
     16: "forced",
     17: "toggled_open",  # toggleOpen
     18: "toggled_closed",  # toggleClose
-    140: "intercom_unlocked",  # "Door unlocked by <flat>"
-    142: "call_not_answered",  # "Call not answered by <flat>"
-    145: "call_made",  # "Call made from <panel> to <flat>"
+    140: "intercom_unlocked",  # "Door unlocked by <user>"
+    142: "call_not_answered",  # "Call not answered by <user>"
+    145: "call_made",  # "Call made from <panel> to <user>"
 }
 # TranslatableFields parameter values on access events: "[Entry reader]" and "[Exit reader]".
 READERS: dict[int, str] = {541134: "entry", 541135: "exit"}

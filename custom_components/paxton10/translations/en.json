@@ -46,7 +46,7 @@
         },
         "data_description": {
           "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant never sends a write to Paxton.",
-          "include_user_names": "Adds residents' names to door events. This is personal data, so it's off by default."
+          "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default."
         }
       },
       "reauth_confirm": {
@@ -121,7 +121,7 @@
           "event_interval": "How often to read the event log. Minimum 5 seconds.",
           "fallback": "If the configured route fails, try the other one ({other_route}).",
           "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",
-          "include_user_names": "Adds residents' names to door events. This is personal data, so it's off by default."
+          "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default."
         }
       }
     },
