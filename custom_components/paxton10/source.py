@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -16,11 +17,12 @@ from .api import PaxtonAuthError, PaxtonError
 from .connection import PaxtonConnection, PaxtonForbidden
 from .const import EVENT_PAGE_SIZE
 from .discovery import read_devices, read_summary
-from .models import Device, DoorEvent, Site, event_filter, name_controllers, parse_event
+from .models import Device, DoorEvent, Site, event_filter, name_hardware, parse_event
 
 _LOGGER = logging.getLogger(__name__)
 
 MAX_BACKOFF = 300
+SEEN_EVENT_IDS = 1000  # well over one page, so an event never comes back as new
 EVENTS_PATH = f"/api/v2/Events/?page=0&pageSize={EVENT_PAGE_SIZE}"
 _sleep = asyncio.sleep  # tests replace this, not asyncio.sleep itself
 
@@ -75,7 +77,10 @@ class PollingSource(UpdateSource):
         self._include_user_names = include_user_names
         self._callback: UpdateCallback | None = None
         self._tasks: list[asyncio.Task[None]] = []
-        self.last_event_id: int | None = None
+        self.last_event_id: str | None = None  # newest event seen, for diagnostics
+        self._seen: deque[str] = deque(maxlen=SEEN_EVENT_IDS)
+        self._seen_set: set[str] = set()
+        self._baselined = False
         self.auth_failed = False
 
     def set_site(self, site: Site) -> None:
@@ -144,7 +149,7 @@ class PollingSource(UpdateSource):
         if self._site.can_read_devices:
             try:
                 update.devices = await read_devices(self._conn)
-                name_controllers(update.devices, self._site.doors)
+                name_hardware(update.devices, self._site.doors)
             except PaxtonForbidden:
                 self._site.can_read_devices = False
         if self._site.can_read_summary:
@@ -160,16 +165,28 @@ class PollingSource(UpdateSource):
         raw = body.get("Result") if isinstance(body, dict) else None
         if not isinstance(raw, list):
             raise PaxtonError("event poll returned no Result list")
+        # The page is newest first. Event ids don't sort, so new means not seen before.
         events = [e for e in (parse_event(r, self._include_user_names) for r in raw if isinstance(r, dict)) if e]
-        newest = max((e.event_id for e in events), default=None)
-        if self.last_event_id is None:
-            self.last_event_id = newest if newest is not None else 0
+        if not self._baselined:
             new: list[DoorEvent] = []
         else:
-            new = sorted((e for e in events if e.event_id > self.last_event_id), key=lambda e: e.event_id)
+            new = [e for e in reversed(events) if e.event_id not in self._seen_set]
+            if events and len(new) == len(events):
+                _LOGGER.debug("Every event on the page is new, so some may have been missed")
         if self._callback:
             await self._callback(SourceUpdate(KIND_EVENTS, events=new))
-        # Move the cursor only once the events are delivered. If the callback raised,
+        # Mark events seen only once they are delivered. If the callback raised,
         # the next poll offers the same events again.
-        if newest is not None and newest > self.last_event_id:
-            self.last_event_id = newest
+        for e in reversed(events):
+            self._remember(e.event_id)
+        self._baselined = True
+        if events:
+            self.last_event_id = events[0].event_id
+
+    def _remember(self, event_id: str) -> None:
+        if event_id in self._seen_set:
+            return
+        if len(self._seen) == self._seen.maxlen:
+            self._seen_set.discard(self._seen[0])
+        self._seen.append(event_id)
+        self._seen_set.add(event_id)

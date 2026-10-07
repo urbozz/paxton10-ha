@@ -37,7 +37,7 @@ from .const import (
     OPT_INCLUDE_USER_NAMES,
 )
 from .discovery import discover_site
-from .models import DoorEvent, Site, door_model, hardware_model
+from .models import KIND_CONTROLLER, DoorEvent, Site, door_model, hardware_model
 from .source import PollingSource, SourceUpdate, UpdateSource
 
 _LOGGER = logging.getLogger(__name__)
@@ -122,9 +122,10 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
 
     @callback
     def register_server_device(self) -> None:
-        """Register the server first, so doors and hardware can point at it with via_device_id."""
+        """Register the server, then the controllers, so doors can point at their controller with via_device_id."""
         server = self.data.server
-        device = dr.async_get(self.hass).async_get_or_create(
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_or_create(
             config_entry_id=self.config_entry.entry_id,
             identifiers={(DOMAIN, server.site_id)},
             manufacturer=MANUFACTURER,
@@ -133,6 +134,31 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             sw_version=server.version,
         )
         self.server_device_id = device.id
+        for hw in self.data.devices.values():
+            if hw.kind == KIND_CONTROLLER:
+                registry.async_get_or_create(
+                    config_entry_id=self.config_entry.entry_id,
+                    identifiers={(DOMAIN, f"{server.site_id}_{hw.entity_id}")},
+                    manufacturer=MANUFACTURER,
+                    model=hardware_model(hw),
+                    name=hw.name,
+                    serial_number=hw.serial,
+                    sw_version=hw.firmware,
+                    via_device_id=device.id,
+                )
+
+    @callback
+    def door_parent_device_id(self, door_id: int) -> str | None:
+        """The registry id of the controller that drives the door, else the server's."""
+        registry = dr.async_get(self.hass)
+        for hw in self.data.devices.values():
+            if hw.kind == KIND_CONTROLLER and door_id in hw.door_ids:
+                parent = registry.async_get_device_by_identifier(
+                    (DOMAIN, f"{self.site_id}_{hw.entity_id}"), self.config_entry.entry_id
+                )
+                if parent:
+                    return parent.id
+        return self.server_device_id
 
     async def async_start(self) -> None:
         """Start the update source after the first refresh."""
@@ -247,7 +273,11 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             sid: {"name": site.server.system_name, "sw_version": site.server.version},
         }
         for door in site.doors.values():
-            wanted[f"{sid}_{door.entity_id}"] = {"name": door.name, "model": door_model(door.appliance_type)}
+            wanted[f"{sid}_{door.entity_id}"] = {
+                "name": door.name,
+                "model": door_model(door.appliance_type),
+                "via_device_id": self.door_parent_device_id(door.entity_id),
+            }
         for hw in site.devices.values():
             wanted[f"{sid}_{hw.entity_id}"] = {
                 "name": hw.name,

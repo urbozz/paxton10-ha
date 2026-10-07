@@ -67,9 +67,11 @@ Changing an option reloads the integration.
 | Paxton10 item | Home Assistant device |
 |---|---|
 | Server | One device with the system summary and software version. |
-| Door, gate, or barrier | One device per door, with the group from the Paxton device tree (for example **Ground Floor**) as its suggested area. |
-| Door controller (GEN1 and GEN2) | One device per controller, named after the door it drives. |
-| Entry panel | One device per panel. |
+| Door controller (GEN1 and GEN2) | One device per controller, named after the door it drives, connected via the server. |
+| Door, gate, or barrier | One device per door, connected via the controller that drives it. A door no controller drives is connected via the server. |
+| Entry panel | One device per panel, named after the door it serves. A panel that serves no door keeps its Paxton name, or is called **Entry panel** and its ID if Paxton only has its serial number. |
+
+The integration doesn't suggest areas. Paxton door names usually include the floor already, and Home Assistant adds the area to new entity IDs, so a suggested area would repeat it. Assign areas yourself in **Settings > Areas, labels & zones**.
 
 Contacts, push buttons, break glass units, and other inputs in the device tree aren't added. Cameras, users, credentials, and temporary PINs aren't supported.
 
@@ -80,23 +82,27 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 | Server | Active users, Total users, Unacknowledged alarms, Offline devices | From `System/Summary`. Created only if the account can read it. |
 | Server | Total devices, Software version | Diagnostic. |
 | Door | Open (button) | Only when **Allow door control** is on. The door opens for its configured open time, then relocks. There's no lock command. |
-| Door | Door event (event) | See [Events](#events). |
+| Door | Event (event) | Named after the door, for example `event.main_entrance_door`. See [Events](#events). |
 | Controller and entry panel | Connectivity (binary sensor) | Diagnostic. |
 | Controller and entry panel | Firmware | Diagnostic. |
-| Controller and entry panel | IP address, Last contact | Diagnostic. Disabled by default. Last contact was weeks old on every device in testing while the devices were online, so don't use it as a health check. |
-| Controller | Battery charge (raw), Battery state (raw), PSU power state (raw) | Diagnostic. The raw numbers from Paxton. What each value means isn't confirmed yet. |
+| Controller and entry panel | IP address | Diagnostic. Disabled by default. |
+| Controller | Battery | Diagnostic. `good`, `low`, `critical`, or `not_connected` (no battery fitted). |
+| Controller | Battery state | Diagnostic. `charging` or `discharging`. |
+| Controller | Power supply | Diagnostic. `external` (mains) or `failure` (running on battery). |
+
+The battery and power supply states use the codes from the Paxton10 web app. A code the web app calls unknown shows as unknown.
 
 Every press of an **Open** button is logged at info level with the door's name, and appears in the Paxton event log as opened by software.
 
 ## Events
 
-The integration fires a `paxton10_event` event on the Home Assistant event bus for each new entry in the Paxton event log, and triggers the matching door's **Door event** entity.
+The integration fires a `paxton10_event` event on the Home Assistant event bus for each new entry in the Paxton event log, and triggers the matching door's event entity.
 
 | Field | Description |
 |---|---|
 | `event_type` | `access_permitted`, `opened_by_software`, `unlocked`, `relocked`, `left_open`, `closed`, `forced`, or `other`. |
 | `event_type_id` | Paxton's numeric event type. |
-| `event_id` | Paxton's event ID. |
+| `event_id` | Paxton's event ID, a 24-character string. It doesn't sort by time. |
 | `door_entity_id`, `door_name` | The Paxton door. Both are `null` for events that aren't about a known door. |
 | `time` | When the event happened, in ISO 8601 format. |
 | `user_name` | Only when **Include user names in events** is on. |
@@ -190,7 +196,7 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 | **Can't connect** during setup | For Direct, check that Home Assistant can reach the server on port 443. For Remote, check that remote access is on in Paxton10. |
 | **The username or password is wrong** | Sign in to the Paxton10 web UI with the same account. |
 | Fewer entities than expected | The account may lack permission for devices or the summary. Try an administrator account to compare. |
-| No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null` or `0`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
+| No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
 | **Paxton10 is using the fallback route** repair | The main route failed. Check the network path. The repair clears itself once the main route works again. |
 
 Debug logging:

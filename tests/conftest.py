@@ -89,15 +89,22 @@ def panel(entity_id: int) -> dict[str, Any]:
     }
 
 
+def eid(n: int) -> str:
+    """Event ids are 24-character strings on 4.11."""
+    return f"{n:024x}"
+
+
 def event(event_id: int, type_id: int = 7, door: int = 2001, user: Any = None) -> dict[str, Any]:
+    """The shape of a live 4.11 event: ApplianceIds is empty and ApplianceData names the door."""
     return {
-        "EventId": event_id,
+        "EventId": eid(event_id),
         "EventTime": "2026-10-07T14:00:00.123+01:00",
         "EventTypeId": type_id,
-        "CategoryId": 7,
-        "ApplianceIds": [door],
+        "CategoryId": 5,
+        "ApplianceIds": [],
+        "ApplianceData": {"ApplianceId": door, "ApplianceTypeId": 0},
         "UserData": user,
-        "Information": "",
+        "Information": None,
     }
 
 
@@ -178,7 +185,7 @@ class FakeServer:
         if path == "/api/v1/Devices/3/false?page=0&pageSize=100":
             return Response(200, self.panels)
         if path.startswith("/api/v2/Events/?page=0"):
-            return Response(200, {"Result": sorted(self.events, key=lambda e: -e["EventId"]), "TotalPages": 1})
+            return Response(200, {"Result": sorted(self.events, key=lambda e: -int(e["EventId"], 16)), "TotalPages": 1})
         if path == "/api/v2/System/ActivateAppliances":
             return Response(200, None)
         return Response(404, None)

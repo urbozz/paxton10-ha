@@ -1,24 +1,63 @@
 {
   "entity": {
     "button": {
-      "open": { "default": "mdi:door-open" }
+      "open": {
+        "default": "mdi:door-open"
+      }
     },
     "event": {
-      "door_event": { "default": "mdi:door" }
+      "door_event": {
+        "default": "mdi:door"
+      }
     },
     "sensor": {
-      "software_version": { "default": "mdi:information-outline" },
-      "active_users": { "default": "mdi:account-check" },
-      "total_users": { "default": "mdi:account-multiple" },
-      "total_devices": { "default": "mdi:devices" },
-      "unacknowledged_alarms": { "default": "mdi:alarm-light" },
-      "offline_devices": { "default": "mdi:lan-disconnect" },
-      "last_contact": { "default": "mdi:clock-check-outline" },
-      "firmware": { "default": "mdi:chip" },
-      "ip_address": { "default": "mdi:ip-network" },
-      "battery_charge": { "default": "mdi:battery" },
-      "battery_state": { "default": "mdi:battery-heart-variant" },
-      "psu_state": { "default": "mdi:power-plug" }
+      "software_version": {
+        "default": "mdi:information-outline"
+      },
+      "active_users": {
+        "default": "mdi:account-check"
+      },
+      "total_users": {
+        "default": "mdi:account-multiple"
+      },
+      "total_devices": {
+        "default": "mdi:devices"
+      },
+      "unacknowledged_alarms": {
+        "default": "mdi:alarm-light"
+      },
+      "offline_devices": {
+        "default": "mdi:lan-disconnect"
+      },
+      "firmware": {
+        "default": "mdi:chip"
+      },
+      "ip_address": {
+        "default": "mdi:ip-network"
+      },
+      "battery_state": {
+        "default": "mdi:battery-heart-variant",
+        "state": {
+          "discharging": "mdi:battery-minus",
+          "charging": "mdi:battery-charging"
+        }
+      },
+      "battery": {
+        "default": "mdi:battery",
+        "state": {
+          "not_connected": "mdi:battery-off-outline",
+          "critical": "mdi:battery-alert",
+          "low": "mdi:battery-low",
+          "good": "mdi:battery-high"
+        }
+      },
+      "power_supply": {
+        "default": "mdi:power-plug",
+        "state": {
+          "failure": "mdi:power-plug-off",
+          "external": "mdi:power-plug"
+        }
+      }
     }
   }
 }

@@ -15,7 +15,7 @@ from .models import (
     Door,
     Server,
     Site,
-    name_controllers,
+    name_hardware,
     parse_devices,
     parse_server,
     parse_summary,
@@ -115,7 +115,7 @@ async def discover_site(conn: PaxtonConnection) -> Site:
     site = Site(server=await read_server(conn), doors=await read_doors(conn))
     try:
         site.devices = await read_devices(conn)
-        name_controllers(site.devices, site.doors)
+        name_hardware(site.devices, site.doors)
     except PaxtonForbidden:
         site.can_read_devices = False
         _LOGGER.info("This Paxton account can't read devices; no controller or panel entities")

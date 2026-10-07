@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -24,7 +23,7 @@ from .entity import (
     add_entities_dynamically,
     server_device_info,
 )
-from .models import KIND_CONTROLLER, Device
+from .models import BATTERY_CHARGE, BATTERY_STATE, KIND_CONTROLLER, POWER_SUPPLY, Device
 
 PARALLEL_UPDATES = 0
 
@@ -45,19 +44,17 @@ SUMMARY_SENSORS: tuple[SensorEntityDescription, ...] = (
 
 @dataclass(frozen=True, kw_only=True)
 class DeviceDescription(SensorEntityDescription):
-    value: Callable[[Device], str | int | datetime | None]
+    value: Callable[[Device], str | None]
     controllers_only: bool = False
 
 
-# Battery and PSU values are raw numbers: their meaning isn't confirmed against the web UI yet.
+def _mapped(codes: dict[int, str], value: int | None) -> str | None:
+    return codes.get(value) if value is not None else None
+
+
+# No last contact sensor: LastContact is a server-side timestamp, the same on every controller
+# to the millisecond and weeks old while they were online, so it isn't a heartbeat.
 DEVICE_SENSORS: tuple[DeviceDescription, ...] = (
-    DeviceDescription(
-        key="last_contact",
-        device_class=SensorDeviceClass.TIMESTAMP,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
-        value=lambda d: d.last_contact,
-    ),
     DeviceDescription(key="firmware", entity_category=EntityCategory.DIAGNOSTIC, value=lambda d: d.firmware),
     DeviceDescription(
         key="ip_address",
@@ -66,23 +63,28 @@ DEVICE_SENSORS: tuple[DeviceDescription, ...] = (
         value=lambda d: d.ip,
     ),
     DeviceDescription(
-        key="battery_charge",
+        key="battery",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(BATTERY_CHARGE.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
-        state_class=SensorStateClass.MEASUREMENT,
         controllers_only=True,
-        value=lambda d: d.battery_charge,
+        value=lambda d: _mapped(BATTERY_CHARGE, d.battery_charge),
     ),
     DeviceDescription(
         key="battery_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(BATTERY_STATE.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
         controllers_only=True,
-        value=lambda d: d.battery_state,
+        value=lambda d: _mapped(BATTERY_STATE, d.battery_state),
     ),
     DeviceDescription(
-        key="psu_state",
+        key="power_supply",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(POWER_SUPPLY.values()),
         entity_category=EntityCategory.DIAGNOSTIC,
         controllers_only=True,
-        value=lambda d: d.psu_state,
+        value=lambda d: _mapped(POWER_SUPPLY, d.psu_state),
     ),
 )
 
@@ -144,6 +146,6 @@ class DeviceSensor(HardwareEntity, SensorEntity):
         self.entity_description = description
 
     @property
-    def native_value(self) -> str | int | datetime | None:
+    def native_value(self) -> str | None:
         device = self.device
         return self.entity_description.value(device) if device else None

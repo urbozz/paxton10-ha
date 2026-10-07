@@ -14,6 +14,12 @@ from .const import EVENT_TYPE_OTHER, EVENT_TYPES
 KIND_CONTROLLER = "controller"
 KIND_ENTRY_PANEL = "entry_panel"
 
+# Controller battery and power codes, from the enums in the Paxton10 4.11 web app
+# (BatteryCharge, BatteryState, PSUPowerStatus). Codes the web app calls Unknown map to None.
+BATTERY_CHARGE: dict[int, str] = {0: "not_connected", 1: "critical", 2: "low", 3: "good"}
+BATTERY_STATE: dict[int, str] = {1: "discharging", 2: "charging"}
+POWER_SUPPLY: dict[int, str] = {1: "failure", 2: "external"}
+
 # System/Summary descriptions mapped to sensor keys.
 SUMMARY_KEYS: dict[str, str] = {
     "Active users": "active_users",
@@ -91,7 +97,7 @@ class Site:
 class DoorEvent:
     """One event from the Paxton10 event log, reduced to what Home Assistant needs."""
 
-    event_id: int
+    event_id: str
     event_type_id: int | None
     event_type: str
     time: datetime | None
@@ -186,14 +192,20 @@ def parse_devices(body: Any, kind: str) -> dict[int, Device]:
     return out
 
 
-def name_controllers(devices: dict[int, Device], doors: dict[int, Door]) -> None:
-    """Controllers all share one description, so name each after the door it drives."""
+def name_hardware(devices: dict[int, Device], doors: dict[int, Door]) -> None:
+    """Name controllers and entry panels after the door they serve.
+
+    Controllers all share one description, and an entry panel nobody named reports its serial
+    as its name. Never build a name from the serial: diagnostics redact serials, and names are logged.
+    """
     for device in devices.values():
-        if device.kind != KIND_CONTROLLER:
-            continue
         names = [doors[d].name for d in device.door_ids if d in doors]
-        # Never build a name from the serial: diagnostics redact serials, and names are logged.
-        device.name = f"{names[0]} controller" if names else f"Controller {device.entity_id}"
+        if device.kind == KIND_CONTROLLER:
+            device.name = f"{names[0]} controller" if names else f"Controller {device.entity_id}"
+        elif names:
+            device.name = f"{names[0]} entry panel"
+        elif device.name == device.serial or device.name.isdigit():
+            device.name = f"Entry panel {device.entity_id}"
 
 
 def door_model(appliance_type: int) -> str:
@@ -204,18 +216,27 @@ def hardware_model(device: Device) -> str:
     return device.model if device.kind == KIND_CONTROLLER else "Paxton10 Entry Panel"
 
 
+def _event_door_ids(raw: dict[str, Any]) -> tuple[int, ...]:
+    # Live door events leave ApplianceIds empty and name the door in ApplianceData.
+    ids = [i for i in raw.get("ApplianceIds") or [] if isinstance(i, int)]
+    appliance = raw.get("ApplianceData")
+    if isinstance(appliance, dict) and isinstance(appliance.get("ApplianceId"), int):
+        ids.append(appliance["ApplianceId"])
+    return tuple(dict.fromkeys(ids))
+
+
 def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
+    # 4.11 sends a 24-character string id. It doesn't sort by time, so the source tracks ids it has seen.
     event_id = raw.get("EventId")
-    if not isinstance(event_id, int):
+    if isinstance(event_id, bool) or not isinstance(event_id, (str, int)) or event_id == "":
         return None
     type_id = raw.get("EventTypeId")
-    door_ids = tuple(i for i in raw.get("ApplianceIds") or [] if isinstance(i, int))
     return DoorEvent(
-        event_id=event_id,
+        event_id=str(event_id),
         event_type_id=type_id if isinstance(type_id, int) else None,
         event_type=EVENT_TYPES.get(type_id, EVENT_TYPE_OTHER) if isinstance(type_id, int) else EVENT_TYPE_OTHER,
         time=parse_time(raw.get("EventTime")),
-        door_ids=door_ids,
+        door_ids=_event_door_ids(raw),
         user_name=_user_name(raw.get("UserData")) if include_user else None,
     )
 

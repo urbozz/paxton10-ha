@@ -32,7 +32,7 @@ from custom_components.paxton10.const import (
 from custom_components.paxton10.diagnostics import async_get_config_entry_diagnostics
 from custom_components.paxton10.source import SourceUpdate
 
-from .conftest import SITE_ID, FakeServer, controller, entity_id, event
+from .conftest import SITE_ID, FakeServer, controller, eid, entity_id, event
 from .test_api import FakeWS, fake_session
 from .test_init import capture, coordinator, setup, source, state
 
@@ -273,14 +273,14 @@ async def test_issue7_failed_delivery_is_retried(hass: HomeAssistant, server: Fa
     src._callback = broken
     with pytest.raises(RuntimeError):
         await src.poll_events()
-    assert src.last_event_id == 100
+    assert src.last_event_id == eid(100)
 
     fired = capture(hass)
     src._callback = good
     await src.poll_events()
     await hass.async_block_till_done()
-    assert [e.data["event_id"] for e in fired] == [101]
-    assert src.last_event_id == 101
+    assert [e.data["event_id"] for e in fired] == [eid(101)]
+    assert src.last_event_id == eid(101)
 
 
 # Issue 8: the fallback target is stored trimmed, and dropped when the fallback is off.
@@ -326,3 +326,81 @@ async def test_issue9_device_registry_follows_changes(hass: HomeAssistant, serve
     assert door and door.name == "Main Front Door"
     ctrl = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id)
     assert ctrl and ctrl.name == "Main Front Door controller"
+
+
+# Issue 10: live 4.11 event ids are 24-character strings that don't sort by time,
+# and door events name the door in ApplianceData, not ApplianceIds.
+
+LIVE_ROW: dict[str, Any] = {
+    "EventId": "6703e1a85d1c2b0f4e9a7c31",
+    "EventTime": "2026-10-07T17:28:24+01:00",
+    "EventTypeId": 7,
+    "CategoryId": 5,
+    "ApplianceIds": [],
+    "ApplianceData": {"ApplianceTypeId": 0, "ApplianceId": 2001, "Appliance": "Main Entrance", "ApplianceGroupId": 0},
+    "UserData": {"UserId": 1015, "UserName": "Test Person", "UserGroup": "Installers"},
+    "UserName": None,
+    "TranslatableFields": {"Parameters": [{"Value": 545001, "Description": ""}], "InformationTranslationKey": 530006},
+    "MyTimeZoneOffsetMins": 0,
+    "DeviceSerialNumber": 0,
+}
+
+
+async def test_issue10_live_event_shape(hass: HomeAssistant, server: FakeServer) -> None:
+    entry = await setup(hass)
+    fired = capture(hass)
+    # A new id that sorts before the existing ones is still new.
+    server.events.append({**LIVE_ROW, "EventId": "0" * 24})
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+    assert [(e.data["event_id"], e.data["event_type"], e.data["door_entity_id"]) for e in fired] == [
+        ("0" * 24, "opened_by_software", 2001)
+    ]
+    assert "user_name" not in fired[0].data
+
+
+async def test_issue10_seen_ids_are_bounded(server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    from collections import deque
+
+    from custom_components.paxton10 import source as source_mod
+
+    src = source_mod.PollingSource(AsyncMock(), AsyncMock(), 30, 10, False)
+    src._seen = deque(maxlen=2)
+    for n in (1, 2, 2, 3):
+        src._remember(eid(n))
+    assert list(src._seen) == [eid(2), eid(3)]
+    assert src._seen_set == {eid(2), eid(3)}
+
+
+async def test_issue10_full_page_of_new_events_is_logged(
+    hass: HomeAssistant, server: FakeServer, caplog: pytest.LogCaptureFixture
+) -> None:
+    entry = await setup(hass)
+    server.events = [event(n) for n in range(500, 503)]
+    with caplog.at_level(logging.DEBUG, logger="custom_components.paxton10.source"):
+        await source(entry).poll_events()
+    assert "may have been missed" in caplog.text
+
+
+# Issue 11: doors hang off the controller that drives them.
+
+
+async def test_issue11_door_via_controller(hass: HomeAssistant, server: FakeServer) -> None:
+    entry = await setup(hass)
+    devices = dr.async_get(hass)
+    ctrl = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id)
+    srv = devices.async_get_device_by_identifier((DOMAIN, SITE_ID), entry.entry_id)
+    door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
+    assert ctrl and srv and door
+    assert ctrl.via_device_id == srv.id
+    assert door.via_device_id == ctrl.id
+    # A door no controller drives stays under the server.
+    other = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2002"), entry.entry_id)
+    assert other and other.via_device_id == srv.id
+
+    # Rewiring the door to no controller moves it back under the server on the next device poll.
+    server.controllers[0]["Connectors"] = []
+    await source(entry).poll_devices()
+    await hass.async_block_till_done()
+    door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
+    assert door and door.via_device_id == srv.id

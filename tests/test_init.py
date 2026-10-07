@@ -32,7 +32,7 @@ from custom_components.paxton10.coordinator import Paxton10Coordinator
 from custom_components.paxton10.diagnostics import async_get_config_entry_diagnostics
 from custom_components.paxton10.source import PollingSource, SourceUpdate
 
-from .conftest import SITE_ID, FakeServer, controller, entity_id, event, make_entry
+from .conftest import SITE_ID, FakeServer, controller, eid, entity_id, event, make_entry
 
 RELEASE = "/api/v2/System/ActivateAppliances"
 EVENTS = "/api/v2/Events/?page=0&pageSize=50"
@@ -57,9 +57,9 @@ def source(entry: MockConfigEntry) -> PollingSource:
 
 
 def state(hass: HomeAssistant, platform: str, object_id: str | int, key: str) -> str:
-    eid = entity_id(hass, platform, object_id, key)
-    assert eid, f"no {platform} {object_id} {key}"
-    st = hass.states.get(eid)
+    ent = entity_id(hass, platform, object_id, key)
+    assert ent, f"no {platform} {object_id} {key}"
+    st = hass.states.get(ent)
     assert st
     return st.state
 
@@ -79,11 +79,15 @@ async def test_setup_and_unload(hass: HomeAssistant, server: FakeServer) -> None
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_ON
     assert state(hass, "binary_sensor", 4002, "connectivity") == STATE_ON
     assert state(hass, "sensor", 4001, "firmware") == "3.00.17013.672"
-    assert state(hass, "sensor", 4001, "battery_charge") == "3"
-    assert state(hass, "sensor", 4001, "psu_state") == "2"
+    assert state(hass, "sensor", 4001, "battery") == "good"
+    assert state(hass, "sensor", 4001, "battery_state") == "charging"
+    assert state(hass, "sensor", 4001, "power_supply") == "external"
+    assert entity_id(hass, "sensor", 4001, "last_contact") is None
     assert state(hass, "event", 2001, "door_event") == STATE_UNKNOWN
+    # The event entity takes the door's name, and no area prefix.
+    assert entity_id(hass, "event", 2001, "door_event") == "event.main_entrance_door"
     # Entry panels have no battery or PSU, and noisy diagnostics start disabled.
-    assert entity_id(hass, "sensor", 4002, "battery_charge") is None
+    assert entity_id(hass, "sensor", 4002, "battery") is None
     registry = er.async_get(hass)
     ip = registry.async_get(entity_id(hass, "sensor", 4001, "ip_address") or "")
     assert ip and ip.disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -91,12 +95,13 @@ async def test_setup_and_unload(hass: HomeAssistant, server: FakeServer) -> None
     # Doors are de-duplicated, the contact input isn't a door, and areas come from the parent group.
     devices = dr.async_get(hass)
     door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
-    assert door and door.suggested_area == "Ground Floor"
+    # No suggested area: door names already carry the group, and HA 2026.10 puts the area in entity IDs.
+    assert door and door.suggested_area is None
     assert devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_1500"), entry.entry_id) is None
     hub = devices.async_get_device_by_identifier((DOMAIN, SITE_ID), entry.entry_id)
-    assert hub and door.via_device_id == hub.id
     ctrl = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id)
-    assert ctrl and ctrl.name == "Main Entrance Door controller"
+    assert hub and ctrl and ctrl.name == "Main Entrance Door controller"
+    assert ctrl.via_device_id == hub.id and door.via_device_id == ctrl.id
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state is ConfigEntryState.NOT_LOADED
@@ -191,23 +196,23 @@ async def test_events(hass: HomeAssistant, server: FakeServer) -> None:
     entry = await setup(hass)
     # Events from before startup are never replayed.
     assert fired == []
-    assert source(entry).last_event_id == 100
+    assert source(entry).last_event_id == eid(100)
 
     server.events += [event(101, 16), event(102, 11, door=2002), event(103, 99), event(104, 7, door=4242)]
     await source(entry).poll_events()
     await hass.async_block_till_done()
     assert [(e.data["event_id"], e.data["event_type"], e.data["door_entity_id"]) for e in fired] == [
-        (101, "forced", 2001),
-        (102, "closed", 2002),
-        (103, "other", 2001),
-        (104, "opened_by_software", None),  # unknown door
+        (eid(101), "forced", 2001),
+        (eid(102), "closed", 2002),
+        (eid(103), "other", 2001),
+        (eid(104), "opened_by_software", None),  # unknown door
     ]
     assert fired[0].data["door_name"] == "Main Entrance Door"
     assert fired[0].data["time"] == "2026-10-07T14:00:00.123000+01:00"
     assert "user_name" not in fired[0].data
-    eid = entity_id(hass, "event", 2001, "door_event")
-    st = hass.states.get(eid or "")
-    assert st and st.attributes["event_type"] == "other" and st.attributes["event_id"] == 103
+    ent = entity_id(hass, "event", 2001, "door_event")
+    st = hass.states.get(ent or "")
+    assert st and st.attributes["event_type"] == "other" and st.attributes["event_id"] == eid(103)
     assert state(hass, "event", 2002, "door_event") != STATE_UNKNOWN
 
     # The next poll sees the same page and fires nothing new.
@@ -234,12 +239,12 @@ async def test_event_user_names_only_when_allowed(hass: HomeAssistant, server: F
 async def test_empty_event_log(hass: HomeAssistant, server: FakeServer) -> None:
     server.events = []
     entry = await setup(hass)
-    assert source(entry).last_event_id == 0
+    assert source(entry).last_event_id is None
     fired = capture(hass)
     server.events.append(event(1))
     await source(entry).poll_events()
     await hass.async_block_till_done()
-    assert [e.data["event_id"] for e in fired] == [1]
+    assert [e.data["event_id"] for e in fired] == [eid(1)]
 
 
 async def test_device_poll_and_unavailable(
@@ -459,5 +464,5 @@ async def test_diagnostics(hass: HomeAssistant, server: FakeServer) -> None:
     for secret in (password_hash("test-password"), "ha@example.com", "192.0.2", "abc123", SITE_ID, "C4001"):
         assert secret not in text
     assert diag["active_route"] == "direct"
-    assert diag["last_event_id"] == 100
+    assert diag["last_event_id"] == eid(100)
     assert len(diag["doors"]) == 2

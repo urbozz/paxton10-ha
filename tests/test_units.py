@@ -20,7 +20,10 @@ from custom_components.paxton10.connection import PaxtonConnection
 from custom_components.paxton10.discovery import discover_site, read_doors, read_server
 from custom_components.paxton10.models import (
     KIND_CONTROLLER,
+    KIND_ENTRY_PANEL,
     Device,
+    Door,
+    name_hardware,
     offset_suffix,
     parse_devices,
     parse_event,
@@ -63,9 +66,16 @@ def test_parse_odd_shapes() -> None:
     assert parse_devices({"not": "a list"}, KIND_CONTROLLER) == {}
     assert parse_devices([{"EntityId": "x"}, {"EntityId": 5}], KIND_CONTROLLER)[5].name == "Device 5"
     assert Device(1, KIND_CONTROLLER, "c", "m", None, None, None, None, None).online is None
-    assert parse_event({"EventId": "x"}, False) is None
-    plain = parse_event({"EventId": 1, "EventTypeId": None, "ApplianceIds": None}, True)
-    assert plain and plain.event_type == "other" and plain.door_ids == () and plain.user_name is None
+    for bad in (None, "", True, 1.5):
+        assert parse_event({"EventId": bad}, False) is None
+    plain = parse_event({"EventId": 1, "EventTypeId": None, "ApplianceIds": None, "ApplianceData": None}, True)
+    assert plain and plain.event_id == "1" and plain.event_type == "other" and plain.door_ids == ()
+    assert plain.user_name is None
+    # The door can come from either field, without duplicates.
+    both = parse_event({"EventId": "a" * 24, "ApplianceIds": [5, "x"], "ApplianceData": {"ApplianceId": 5}}, False)
+    assert both and both.door_ids == (5,)
+    data = parse_event({"EventId": "b" * 24, "ApplianceIds": [], "ApplianceData": {"ApplianceId": "x"}}, False)
+    assert data and data.door_ids == ()
 
 
 @pytest.mark.parametrize(
@@ -183,3 +193,41 @@ async def test_setup_auth_failure_on_first_event_poll(hass: HomeAssistant, serve
     with patch("custom_components.paxton10.source.PollingSource.poll_events", side_effect=PaxtonAuthError("x")):
         await hass.config_entries.async_setup(entry.entry_id)
     assert entry.state is ConfigEntryState.SETUP_ERROR
+
+
+def test_name_hardware() -> None:
+    doors = {7: Door(7, "Core 3 Door", 1, 1, 1, None)}
+
+    def dev(entity_id: int, kind: str, name: str, serial: str | None, door_ids: tuple[int, ...] = ()) -> Device:
+        return Device(entity_id, kind, name, "m", serial, None, None, 1, None, door_ids=door_ids)
+
+    devices = {
+        1: dev(1, KIND_CONTROLLER, "Paxton10 Door Controller", "111", (7,)),
+        2: dev(2, KIND_CONTROLLER, "Paxton10 Door Controller", "222"),
+        3: dev(3, KIND_ENTRY_PANEL, "Core 3", "333", (7,)),
+        4: dev(4, KIND_ENTRY_PANEL, "7507256", "7507256"),  # unnamed: Paxton reports the serial
+        5: dev(5, KIND_ENTRY_PANEL, "8075329", None),
+        6: dev(6, KIND_ENTRY_PANEL, "Reception", "666"),
+    }
+    name_hardware(devices, doors)
+    assert {k: d.name for k, d in devices.items()} == {
+        1: "Core 3 Door controller",
+        2: "Controller 2",
+        3: "Core 3 Door entry panel",
+        4: "Entry panel 4",
+        5: "Entry panel 5",
+        6: "Reception",
+    }
+
+
+def test_unknown_battery_codes_are_unknown() -> None:
+    from custom_components.paxton10.sensor import DEVICE_SENSORS
+
+    sensors = {d.key: d for d in DEVICE_SENSORS}
+    device = Device(1, KIND_CONTROLLER, "c", "m", None, None, None, 1, None, 0, 0, 0)
+    assert sensors["battery"].value(device) == "not_connected"
+    assert sensors["battery_state"].value(device) is None  # 0 is Unknown in the web app
+    assert sensors["power_supply"].value(device) is None
+    device.battery_charge, device.psu_state = 9, None
+    assert sensors["battery"].value(device) is None
+    assert sensors["power_supply"].value(device) is None

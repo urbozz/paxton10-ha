@@ -33,16 +33,16 @@ def _via(coordinator: Paxton10Coordinator, info: DeviceInfo) -> DeviceInfo:
 
 def door_device_info(coordinator: Paxton10Coordinator, door: Door) -> DeviceInfo:
     sid = coordinator.site_id
-    return _via(
-        coordinator,
-        DeviceInfo(
-            identifiers={(DOMAIN, f"{sid}_{door.entity_id}")},
-            manufacturer=MANUFACTURER,
-            model=door_model(door.appliance_type),
-            name=door.name,
-            suggested_area=door.group_name,
-        ),
+    info = DeviceInfo(
+        identifiers={(DOMAIN, f"{sid}_{door.entity_id}")},
+        manufacturer=MANUFACTURER,
+        model=door_model(door.appliance_type),
+        name=door.name,
     )
+    # Doors hang off the controller that drives them, so the device page shows the wiring.
+    if parent := coordinator.door_parent_device_id(door.entity_id):
+        info["via_device_id"] = parent
+    return info
 
 
 def hardware_device_info(coordinator: Paxton10Coordinator, device: Device) -> DeviceInfo:
