@@ -71,30 +71,6 @@ INTERCOM_USER_PARAM: dict[int, int] = {530058: 1, 530060: 0, 530083: 1}
 EVENT_TYPE_OTHER = "other"
 
 
-# Paxton's credential type names (the web app's CredentialTypes list), keyed by letters only.
-# CredentialData.Credential on an event is the name the credential was given in Paxton: often just
-# the type name, sometimes with a number, but also an email address, a date, or a note. Only a plain
-# type name is turned into a credential type; any other name gives none.
-CREDENTIAL_TYPES: dict[str, str] = {
-    "proximitycard": "proximity_card",
-    "proximityisocard": "proximity_iso_card",
-    "proximityisocardmagstrip": "proximity_iso_card_magstrip",
-    "encryptedproximitycard": "encrypted_proximity_card",
-    "keyfob": "keyfob",
-    "encryptedkeyfob": "encrypted_keyfob",
-    "minihandsfreekeyfob": "mini_hands_free_keyfob",
-    "handsfreecredential": "hands_free_credential",
-    "handsfreekeycard": "hands_free_key_card",
-    "smartcredential": "smart_credential",
-    "securetoken": "secure_token",
-    "watchprox": "watchprox",
-    "vehiclenumberplate": "vehicle_number_plate",
-    "mobilephonenumber": "mobile_phone_number",
-    "pin": "pin",
-    "password": "password",
-}
-
-
 # Event types that mean a controller or panel changed state: they trigger an early read of the
 # device list. From the web app's DMSEventType enum. Only 12 has been seen live: Paxton logs it for
 # each door when a controller restarts or is reinstated.

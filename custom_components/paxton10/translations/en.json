@@ -125,7 +125,7 @@
           "fallback": "If the configured route fails, try the other one ({other_route}).",
           "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",
           "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default.",
-          "include_credential_names": "Adds the name each credential was given in Paxton to access events. Credential types (such as Keyfob) come with user names."
+          "include_credential_names": "Adds the name each credential was given in Paxton to access events, as it was entered."
         }
       }
     },

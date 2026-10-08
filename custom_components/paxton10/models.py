@@ -5,13 +5,11 @@ Parsers take the raw JSON from the Paxton10 API. No Home Assistant imports.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
 from .const import (
-    CREDENTIAL_TYPES,
     EVENT_TYPE_OTHER,
     EVENT_TYPES,
     INTERCOM_USER_PARAM,
@@ -148,7 +146,6 @@ class DoorEvent:
     door_ids: tuple[int, ...]
     user_name: str | None
     reader: str | None = None  # entry or exit, on access events
-    credential: str | None = None  # the credential's type, such as "keyfob"; with user names only
     credential_name: str | None = None  # the name the credential was given in Paxton; only with its own option on
 
 
@@ -301,7 +298,6 @@ def parse_event(
         door_ids=_event_door_ids(raw),
         user_name=(_user_name(raw.get("UserData")) or _intercom_user(raw)) if include_user else None,
         reader=_reader(raw),
-        credential=_credential(raw) if include_user else None,
         credential_name=_credential_name(raw) if include_credential_name else None,
     )
 
@@ -311,22 +307,6 @@ def _credential_name(raw: dict[str, Any]) -> str | None:
     for source in (raw.get("CredentialData"), raw.get("UserData")):
         if isinstance(source, dict) and isinstance(label := source.get("Credential"), str) and label.strip():
             return label.strip()
-    return None
-
-
-def _credential(raw: dict[str, Any]) -> str | None:
-    """The type of credential used, such as "keyfob", when its name is a plain type name.
-
-    CredentialData.Credential is the name the credential was given in Paxton. In a live 4.11
-    export it was often the type name ("KeyFob", "HandsFreeCredential-3"), but also an email
-    address, a date, or a note. So only a name that is a known type name, with at most a
-    trailing number or date, gives a type. The name itself comes with credential_name instead.
-    """
-    for source in (raw.get("CredentialData"), raw.get("UserData")):
-        if isinstance(source, dict) and isinstance(label := source.get("Credential"), str):
-            core = re.sub(r"[\s_\-:#/]*[\d/]+$", "", label.strip())
-            if kind := CREDENTIAL_TYPES.get(re.sub(r"[^a-z]", "", core.lower())):
-                return kind
     return None
 
 

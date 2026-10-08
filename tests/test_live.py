@@ -679,30 +679,32 @@ def test_door_state_read_is_allowed() -> None:
         check_allowed("POST", "/api/v1/Appliance/Connector/Status/Set", allow_writes=False)
 
 
-async def test_credential_type_only_with_user_names(
+async def test_credential_type_never_derived(
     hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
 ) -> None:
-    """Live fob events carry CredentialData. Only a credential type is passed on, and only with names on."""
-    from custom_components.paxton10.const import OPT_INCLUDE_USER_NAMES
+    """The credential's name is free text, so a name that looks like a type never becomes one."""
+    from custom_components.paxton10.const import (
+        OPT_INCLUDE_CREDENTIAL_NAMES,
+        OPT_INCLUDE_USER_NAMES,
+    )
 
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True, OPT_INCLUDE_CREDENTIAL_NAMES: True})
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    fired = capture(hass)
     fob = {
         **event(101, 5, user={"UserId": 7, "UserName": "Alex Smith"}),
         "CredentialData": {"CredentialId": 175, "Credential": " Keyfob ", "CredentialValue": "12345678", "UserId": 0},
     }
-    for names, expected in ((True, "keyfob"), (False, None)):
-        entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: names})
-        src = live(entry)
-        await until(lambda: src.mode == MODE_LIVE)  # noqa: B023
-        fired = capture(hass)
-        hub.pushes.put_nowait([{**fob, "EventId": eid(101 if names else 102)}])
-        await until(lambda: len(fired) == 1, hass)  # noqa: B023
-        assert fired[0].data.get("credential") == expected
-        state = hass.states.get("event.main_entrance_door")
-        assert state and state.attributes.get("credential") == expected
-        # The credential's own id and value never reach Home Assistant.
-        assert "12345678" not in str(fired[0].data) and "175" not in str(state.attributes)
-        await hass.config_entries.async_unload(entry.entry_id)
-        await hass.config_entries.async_remove(entry.entry_id)
+    hub.pushes.put_nowait([fob])
+    await until(lambda: len(fired) == 1, hass)
+    state = hass.states.get("event.main_entrance_door")
+    assert state
+    assert fired[0].data["credential_name"] == state.attributes["credential_name"] == "Keyfob"
+    assert "credential" not in fired[0].data and "credential" not in state.attributes
+    # The credential's own id and value never reach Home Assistant.
+    assert "12345678" not in str(fired[0].data) and "175" not in str(state.attributes)
+    await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_stop_event_stops_updates_cleanly(

@@ -265,35 +265,18 @@ def test_device_status(status: int | None, online: bool | None, name: str | None
     assert {d.key: d for d in DEVICE_SENSORS}["status"].value(device) == name
 
 
-@pytest.mark.parametrize(
-    ("description", "expected"),
-    [
-        ("Keyfob", "keyfob"),
-        ("KeyFob", "keyfob"),
-        (" KeyFob-12 ", "keyfob"),
-        ("KeyFob 03/04/2025", "keyfob"),
-        ("HandsFreeCredential", "hands_free_credential"),
-        ("Hands-free Credential-4", "hands_free_credential"),
-        ("HandsFreeCredential - 2", "hands_free_credential"),
-        ("Smart Credential", "smart_credential"),
-        ("PIN", "pin"),
-        # Free text is never passed on: an email, a date, a note, or a person's name.
-        ("alex.smith@example.com", None),
-        ("03/04/2025", None),
-        ("Replacement for faulty Credential.", None),
-        ("KeyFob Alex", None),
-        ("HandsFreeCredential 03/04/2025 reprogrammed", None),
-        (" ", None),
-    ],
-)
-def test_credential_type(description: str, expected: str | None) -> None:
-    """Regression: v0.5.4-v0.6.1 passed the description on, which can be a person's email address."""
-    row = {"EventId": "a" * 24, "CredentialData": {"CredentialId": 22, "Credential": description, "CredentialValue": "x"}}
-    assert parse_event(row, True).credential == expected  # type: ignore[union-attr]
-    assert parse_event(row, False).credential is None  # type: ignore[union-attr]
+@pytest.mark.parametrize("name", ["Keyfob", "HandsFreeCredential-3", "alex.smith@example.com", "Replacement fob"])
+def test_credential_name_is_never_a_type(name: str) -> None:
+    """The name is free text, even when it looks like a type, so it's passed on as entered and never typed."""
+    row = {"EventId": "a" * 24, "CredentialData": {"CredentialId": 22, "Credential": f" {name} ", "CredentialValue": "x"}}
+    parsed = parse_event(row, True, True)
+    assert parsed is not None and parsed.credential_name == name
+    assert not hasattr(parsed, "credential")
+    assert parse_event(row, True, False).credential_name is None  # type: ignore[union-attr]
 
 
 def test_credential_sources() -> None:
-    # Older rows put it in UserData; a missing block gives None.
-    assert parse_event({"EventId": "b", "UserData": {"Credential": "PIN"}}, True).credential == "pin"  # type: ignore[union-attr]
-    assert parse_event({"EventId": "d", "CredentialData": None}, True).credential is None  # type: ignore[union-attr]
+    # Older rows put it in UserData; a blank or missing block gives None.
+    assert parse_event({"EventId": "b", "UserData": {"Credential": "PIN"}}, False, True).credential_name == "PIN"  # type: ignore[union-attr]
+    assert parse_event({"EventId": "c", "CredentialData": {"Credential": " "}}, False, True).credential_name is None  # type: ignore[union-attr]
+    assert parse_event({"EventId": "d", "CredentialData": None}, False, True).credential_name is None  # type: ignore[union-attr]

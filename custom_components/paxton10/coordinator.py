@@ -397,7 +397,6 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             }
             if self.options.include_user_names:
                 data["user_name"] = event.user_name
-                data["credential"] = event.credential
             if self.options.include_credential_names:
                 data["credential_name"] = event.credential_name
             self.hass.bus.async_fire(EVENT_PAXTON10, data)
