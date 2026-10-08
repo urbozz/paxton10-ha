@@ -910,3 +910,35 @@ async def test_forced_or_left_open_sensor(
         hub.pushes.put_nowait(door_push(2001, value))
         await until(lambda: (s := hass.states.get(alarm)) is not None and s.state == state, hass)  # noqa: B023
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(("names", "descriptions"), [(True, True), (False, True), (True, False)])
+async def test_credential_description_option(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float], names: bool, descriptions: bool
+) -> None:
+    """The raw description only appears with its own option on, independent of user names."""
+    from custom_components.paxton10.const import (
+        OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS,
+        OPT_INCLUDE_USER_NAMES,
+    )
+
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: names, OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS: descriptions})
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    fired = capture(hass)
+    fob = {
+        **event(101, 5, user={"UserId": 7, "UserName": "Alex Smith"}),
+        "CredentialData": {"CredentialId": 22, "Credential": "alex.smith@example.com", "CredentialValue": "12345678"},
+    }
+    hub.pushes.put_nowait([fob])
+    await until(lambda: len(fired) == 1, hass)
+    attrs = hass.states.get("event.main_entrance_door").attributes  # type: ignore[union-attr]
+    expected = "alex.smith@example.com" if descriptions else None
+    assert fired[0].data.get("credential_description") == expected
+    assert attrs.get("credential_description") == expected
+    # The email is never mistaken for a credential type, and the number never appears.
+    assert fired[0].data.get("credential") is None and "credential" not in attrs
+    assert "12345678" not in str(fired[0].data) and "12345678" not in str(attrs)
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert "alex.smith@example.com" not in str(diag)
+    await hass.config_entries.async_unload(entry.entry_id)

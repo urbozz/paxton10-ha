@@ -113,7 +113,8 @@
           "event_interval": "Event interval",
           "fallback": "Use a fallback route",
           "fallback_target": "Fallback address or remote ID",
-          "include_user_names": "Include user names in events"
+          "include_user_names": "Include user names in events",
+          "include_credential_descriptions": "Include credential descriptions in events"
         },
         "data_description": {
           "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant sends no writes at all.",
@@ -121,7 +122,8 @@
           "event_interval": "Events arrive live from the server. This is how often to read the event log while the live connection is down. Minimum 5 seconds.",
           "fallback": "If the configured route fails, try the other one ({other_route}).",
           "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",
-          "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default."
+          "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default.",
+          "include_credential_descriptions": "Adds the credential's description, as typed in Paxton, to access events. This is free text: it can be a person's email address or name. Off by default. Credential types (such as Keyfob) come with user names instead."
         }
       }
     },

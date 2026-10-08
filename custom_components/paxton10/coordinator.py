@@ -35,6 +35,7 @@ from .const import (
     OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
+    OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS,
     OPT_INCLUDE_USER_NAMES,
 )
 from .discovery import discover_site
@@ -59,6 +60,7 @@ class EntryOptions:
     event_interval: int
     fallback_target: str | None
     include_user_names: bool
+    include_credential_descriptions: bool
 
     @classmethod
     def from_entry(cls, entry: ConfigEntry) -> EntryOptions:
@@ -69,6 +71,7 @@ class EntryOptions:
             event_interval=int(o.get(OPT_EVENT_INTERVAL, DEFAULT_EVENT_INTERVAL)),
             fallback_target=(o.get(OPT_FALLBACK_TARGET) or None) if o.get(OPT_FALLBACK) else None,
             include_user_names=bool(o.get(OPT_INCLUDE_USER_NAMES, False)),
+            include_credential_descriptions=bool(o.get(OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS, False)),
         )
 
 
@@ -90,7 +93,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
 
     The source pushes updates to the coordinator, so the coordinator itself never polls
     (update_interval is None). Behind it, device status and the summary are polled, door events
-    are live on Direct (polled on Remote or while the live feed is down), and the layout is
+    are live on Direct and Remote (polled while the live feed is down), and the layout is
     rediscovered hourly.
     """
 
@@ -175,6 +178,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             self.options.device_interval,
             self.options.event_interval,
             self.options.include_user_names,
+            self.options.include_credential_descriptions,
         )
         try:
             await self.source.async_start(self._async_handle_update)
@@ -386,6 +390,8 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             if self.options.include_user_names:
                 data["user_name"] = event.user_name
                 data["credential"] = event.credential
+            if self.options.include_credential_descriptions:
+                data["credential_description"] = event.credential_description
             self.hass.bus.async_fire(EVENT_PAXTON10, data)
             for listener in list(self._event_listeners.get(door_id, [])):
                 listener(event)

@@ -245,6 +245,7 @@ async def test_options(hass: HomeAssistant, server: FakeServer) -> None:
         OPT_EVENT_INTERVAL: 5,
         OPT_FALLBACK: True,
         OPT_INCLUDE_USER_NAMES: False,
+        "include_credential_descriptions": True,
     }
     result = await hass.config_entries.options.async_configure(result["flow_id"], options)
     assert result["errors"] == {OPT_FALLBACK_TARGET: "fallback_target_required"}
@@ -256,5 +257,6 @@ async def test_options(hass: HomeAssistant, server: FakeServer) -> None:
     await hass.async_block_till_done()
     assert entry.options[OPT_ALLOW_DOOR_CONTROL] is True
     assert entry.options[OPT_FALLBACK_TARGET] == "abc123"
+    assert entry.options["include_credential_descriptions"] is True
     # The entry reloaded with door control on, so the buttons exist now.
     assert entity_id(hass, "button", 2001, "open") is not None

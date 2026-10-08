@@ -149,6 +149,7 @@ class DoorEvent:
     user_name: str | None
     reader: str | None = None  # entry or exit, on access events
     credential: str | None = None  # the credential's type, such as "keyfob"; with user names only
+    credential_description: str | None = None  # the installer's free text; only with its own option on
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -284,7 +285,9 @@ def _event_door_ids(raw: dict[str, Any]) -> tuple[int, ...]:
     return tuple(dict.fromkeys(ids))
 
 
-def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
+def parse_event(
+    raw: dict[str, Any], include_user: bool, include_credential_description: bool = False
+) -> DoorEvent | None:
     # 4.11 sends a 24-character string id. It doesn't sort by time, so the source tracks ids it has seen.
     event_id = raw.get("EventId")
     if isinstance(event_id, bool) or not isinstance(event_id, (str, int)) or event_id == "":
@@ -299,7 +302,16 @@ def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
         user_name=(_user_name(raw.get("UserData")) or _intercom_user(raw)) if include_user else None,
         reader=_reader(raw),
         credential=_credential(raw) if include_user else None,
+        credential_description=_credential_description(raw) if include_credential_description else None,
     )
+
+
+def _credential_description(raw: dict[str, Any]) -> str | None:
+    """The credential's description as the installer typed it. Can be personal: an email, a name."""
+    for source in (raw.get("CredentialData"), raw.get("UserData")):
+        if isinstance(source, dict) and isinstance(label := source.get("Credential"), str) and label.strip():
+            return label.strip()
+    return None
 
 
 def _credential(raw: dict[str, Any]) -> str | None:

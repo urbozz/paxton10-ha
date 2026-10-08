@@ -21,6 +21,7 @@ OPT_EVENT_INTERVAL = "event_interval"
 OPT_FALLBACK = "fallback"
 OPT_FALLBACK_TARGET = "fallback_target"
 OPT_INCLUDE_USER_NAMES = "include_user_names"
+OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS = "include_credential_descriptions"
 
 DEFAULT_DEVICE_INTERVAL = 30
 DEFAULT_EVENT_INTERVAL = 10
