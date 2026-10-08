@@ -187,6 +187,7 @@
               "toggled_open": "Toggled open",
               "toggled_closed": "Toggled closed",
               "intercom_unlocked": "Unlocked by intercom",
+              "intercom_not_unlocked": "Not unlocked by intercom",
               "call_not_answered": "Call not answered",
               "call_made": "Call made",
               "other": "Other"

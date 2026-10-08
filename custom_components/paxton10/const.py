@@ -53,6 +53,7 @@ EVENT_TYPES: dict[int, str] = {
     17: "toggled_open",  # toggleOpen
     18: "toggled_closed",  # toggleClose
     140: "intercom_unlocked",  # "Door unlocked by <user>"
+    141: "intercom_not_unlocked",  # "Door not unlocked by <user>": the called user declined (live 4.11 export)
     142: "call_not_answered",  # "Call not answered by <user>"
     145: "call_made",  # "Call made from <panel> to <user>"
 }
@@ -64,3 +65,27 @@ READERS: dict[int, str] = {541134: "entry", 541135: "exit"}
 # and 530083 "Call made from <panel> to <user>" (panel, user).
 INTERCOM_USER_PARAM: dict[int, int] = {530058: 1, 530060: 0, 530083: 1}
 EVENT_TYPE_OTHER = "other"
+
+
+# Paxton's credential type names (the web app's CredentialTypes list), keyed by letters only.
+# CredentialData.Credential on an event is the credential's free-text description: often just the
+# type name, sometimes with a number, but also an email address, a date, or a note. Only a plain
+# type name is ever turned into a credential type; any other description gives none.
+CREDENTIAL_TYPES: dict[str, str] = {
+    "proximitycard": "proximity_card",
+    "proximityisocard": "proximity_iso_card",
+    "proximityisocardmagstrip": "proximity_iso_card_magstrip",
+    "encryptedproximitycard": "encrypted_proximity_card",
+    "keyfob": "keyfob",
+    "encryptedkeyfob": "encrypted_keyfob",
+    "minihandsfreekeyfob": "mini_hands_free_keyfob",
+    "handsfreecredential": "hands_free_credential",
+    "handsfreekeycard": "hands_free_key_card",
+    "smartcredential": "smart_credential",
+    "securetoken": "secure_token",
+    "watchprox": "watchprox",
+    "vehiclenumberplate": "vehicle_number_plate",
+    "mobilephonenumber": "mobile_phone_number",
+    "pin": "pin",
+    "password": "password",
+}

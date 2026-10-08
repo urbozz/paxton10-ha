@@ -5,11 +5,18 @@ Parsers take the raw JSON from the Paxton10 API. No Home Assistant imports.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from .const import EVENT_TYPE_OTHER, EVENT_TYPES, INTERCOM_USER_PARAM, READERS
+from .const import (
+    CREDENTIAL_TYPES,
+    EVENT_TYPE_OTHER,
+    EVENT_TYPES,
+    INTERCOM_USER_PARAM,
+    READERS,
+)
 
 KIND_CONTROLLER = "controller"
 KIND_ENTRY_PANEL = "entry_panel"
@@ -141,7 +148,7 @@ class DoorEvent:
     door_ids: tuple[int, ...]
     user_name: str | None
     reader: str | None = None  # entry or exit, on access events
-    credential: str | None = None  # the credential's type label, such as "Keyfob"; with user names only
+    credential: str | None = None  # the credential's type, such as "keyfob"; with user names only
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -296,15 +303,18 @@ def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
 
 
 def _credential(raw: dict[str, Any]) -> str | None:
-    """The type label of the credential used, such as "Keyfob".
+    """The type of credential used, such as "keyfob", when its description is a plain type name.
 
-    Access events carry CredentialData with the credential's own id, this label, and its value
-    (the card or fob number). Only the label is kept: the id and value identify one physical
-    credential, which Home Assistant has no use for.
+    CredentialData.Credential is the free-text description an installer gave the credential.
+    In a live 4.11 export it was often the type name ("KeyFob", "HandsFreeCredential-3"), but also
+    an email address, a date, or a note. So only a description that is a known type name, with at
+    most a trailing number or date, gives a type. The description itself is never passed on.
     """
     for source in (raw.get("CredentialData"), raw.get("UserData")):
-        if isinstance(source, dict) and isinstance(label := source.get("Credential"), str) and label.strip():
-            return label.strip()
+        if isinstance(source, dict) and isinstance(label := source.get("Credential"), str):
+            core = re.sub(r"[\s_\-:#/]*[\d/]+$", "", label.strip())
+            if kind := CREDENTIAL_TYPES.get(re.sub(r"[^a-z]", "", core.lower())):
+                return kind
     return None
 
 

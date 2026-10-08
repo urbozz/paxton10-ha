@@ -460,7 +460,7 @@ async def test_intercom_events_name_the_called_user(hass: HomeAssistant, server:
         "b": ("call_not_answered", "Alex Smith"),
         "c": ("call_made", "Alex Smith"),
         "d": ("call_made", None),
-        "e": ("other", None),
+        "e": ("intercom_not_unlocked", None),  # 141 is mapped; its name template isn't known yet
     }
 
     describers: dict[tuple[str, str], Any] = {}

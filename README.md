@@ -123,7 +123,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `door_entity_id`, `door_name` | The door's numeric ID and name in Paxton. Both are `null` for events that aren't about a known door. |
 | `time` | When the event happened, in ISO 8601 format. |
 | `user_name` | Only when **Include user names in events** is on. For intercom events, the user who was called. |
-| `credential` | Only when **Include user names in events** is on. The type of credential used, as Paxton labels it, for example `Keyfob`. Access events only. The credential's number is never included. |
+| `credential` | Only when **Include user names in events** is on. The type of credential used, for example `keyfob`, `hands_free_credential`, `smart_credential`, or `pin`. Access events only. Paxton only labels a credential with free text, so the type is given only when that text is plainly a type name (with at most a number or date after it). Otherwise there's no `credential`. The text itself, and the credential's number, are never included. |
 | `config_entry_id` | The integration entry the event came from. |
 
 ### Event types
@@ -138,6 +138,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `no_permission` | 4 | Access denied: the user has no permission for this door at this time. |
 | `access_not_made` | 3 | Access was granted, but the door wasn't opened. |
 | `intercom_unlocked` | 140 | The called user unlocked the door from their intercom. |
+| `intercom_not_unlocked` | 141 | The called user declined to unlock the door. The called user's name isn't extracted yet for this type. |
 | `call_made` | 145 | Someone called a user from the entry panel. |
 | `call_not_answered` | 142 | The called user didn't answer. |
 | `unlocked`, `relocked` | 8, 9 | A time profile unlocked or relocked the door. |

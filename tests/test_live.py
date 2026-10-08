@@ -682,14 +682,14 @@ def test_door_state_read_is_allowed() -> None:
 async def test_credential_type_only_with_user_names(
     hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
 ) -> None:
-    """Live fob events carry CredentialData. Only its type label is passed on, and only with names on."""
+    """Live fob events carry CredentialData. Only a credential type is passed on, and only with names on."""
     from custom_components.paxton10.const import OPT_INCLUDE_USER_NAMES
 
     fob = {
         **event(101, 5, user={"UserId": 7, "UserName": "Alex Smith"}),
         "CredentialData": {"CredentialId": 175, "Credential": " Keyfob ", "CredentialValue": "12345678", "UserId": 0},
     }
-    for names, expected in ((True, "Keyfob"), (False, None)):
+    for names, expected in ((True, "keyfob"), (False, None)):
         entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: names})
         src = live(entry)
         await until(lambda: src.mode == MODE_LIVE)  # noqa: B023
