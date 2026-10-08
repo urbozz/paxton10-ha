@@ -215,3 +215,42 @@ async def test_request_during_a_list_read_is_kept(
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before + 2
     assert not src._devices_requested
+
+
+async def test_rediscovery_counts_as_a_full_read(
+    hass: HomeAssistant, server: FakeServer, clock: dict[str, float]
+) -> None:
+    """The hourly layout check reads the controller list, so the poll doesn't read it again straight after."""
+    src = await stopped(hass)
+    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    src.set_site(src._site)
+    before = reads(server, CONTROLLERS)
+    await src.poll_devices()
+    assert reads(server, CONTROLLERS) == before
+    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    await src.poll_devices()
+    assert reads(server, CONTROLLERS) == before + 1
+
+
+async def test_remote_reads_the_list_less_often(
+    hass: HomeAssistant, server: FakeServer, clock: dict[str, float]
+) -> None:
+    """Every Remote read goes through Paxton's relay, so the scheduled list read waits at least 30 minutes."""
+    from custom_components.paxton10.const import (
+        REMOTE_DEVICE_FULL_INTERVAL,
+        ROUTE_REMOTE,
+    )
+
+    src = await stopped(hass)
+    src._conn.active_route = ROUTE_REMOTE
+    before = reads(server, CONTROLLERS)
+    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    await src.poll_devices()
+    assert reads(server, CONTROLLERS) == before
+    clock["t"] += REMOTE_DEVICE_FULL_INTERVAL - DEFAULT_DEVICE_FULL_INTERVAL
+    await src.poll_devices()
+    assert reads(server, CONTROLLERS) == before + 1
+    # A hardware event still reads it at once.
+    src.request_device_refresh()
+    await src.poll_devices()
+    assert reads(server, CONTROLLERS) == before + 2

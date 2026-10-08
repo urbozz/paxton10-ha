@@ -27,6 +27,9 @@ OPT_INCLUDE_CREDENTIAL_NAMES = "include_credential_names"
 DEFAULT_DEVICE_INTERVAL = 30
 DEFAULT_DEVICE_FULL_INTERVAL = 600  # the controller list is ~57 KB per controller, so read it sparingly
 MIN_DEVICE_FULL_INTERVAL = 60
+# On Remote every read goes through Paxton's relay, so the controller list is read at most this often
+# unless something asks for it (a count change or a hardware event).
+REMOTE_DEVICE_FULL_INTERVAL = 1800
 DEFAULT_EVENT_INTERVAL = 10
 MIN_EVENT_INTERVAL = 5
 MIN_DEVICE_INTERVAL = 10

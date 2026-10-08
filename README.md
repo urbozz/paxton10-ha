@@ -49,7 +49,7 @@ Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in exp
 
 | Parameter | Description |
 |---|---|
-| Connection | **Direct** connects to the server over HTTPS. The server's self-signed certificate isn't checked. **Remote** goes through Paxton's remote access relay at `p10remote.com`. Direct is faster. |
+| Connection | **Direct** connects to the server over HTTPS. The server's self-signed certificate isn't checked. **Remote** goes through Paxton's remote access relay at `p10remote.com`. Use Direct when Home Assistant can reach the server: it's faster, and it keeps all traffic on your network. Use Remote when it can't, or as the fallback route. Every Remote request goes through Paxton's relay, so the integration reads less often on Remote: see [How data updates](#how-data-updates). |
 | Server address (Direct) | The server's IP address or host name, with an optional port. A pasted URL is reduced to its host. |
 | Remote ID (Remote) | The site's remote ID. A pasted `paxton10remote.com` address is reduced to its ID. |
 | Username | The Paxton10 account's email address. |
@@ -80,7 +80,7 @@ Open the integration and click **Configure**.
 |---|---|---|
 | Allow door control | Off | Adds an **Open** button for each door, gate, and barrier (Paxton calls them access points). When off, Home Assistant creates no buttons and the client refuses every write. |
 | Device status interval | 30 s | How often to read the system summary and door lock state. These are small. Minimum 10 s. |
-| Full device refresh | 10 min | How often to read the full controller and entry panel list when nothing has changed. It's large, so it's also read straight away when it's needed: see [How data updates](#how-data-updates). Minimum 60 s. |
+| Full device refresh | 10 min | How often to read the full controller and entry panel list when nothing has changed. It's large, so it's also read straight away when it's needed: see [How data updates](#how-data-updates). On the Remote connection it's at least 30 minutes. Minimum 60 s. |
 | Event interval | 10 s | How often to read the event log while the live feed is down. Minimum 5 s. |
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
@@ -174,8 +174,8 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 - **Events while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
 - **Door lock state:** live on the same feed, and also read with every device status poll. A poll never overwrites a newer live update.
 - **Summary:** every device status interval (30 s by default).
-- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware): the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (such as a restart, a reinstate, going offline or online, a power failure, or a low battery), and otherwise every full device refresh (10 minutes by default). A restart or reinstate shows within about a second. A controller going offline shows within about one device status interval. A change that moves neither count and logs no event, such as a firmware version, can take up to the full refresh interval to show.
-- **Layout:** every hour, the integration reads the device tree again. It adds new doors and devices, and removes devices that are no longer on the server.
+- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware): the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (such as a restart, a reinstate, going offline or online, a power failure, or a low battery), and otherwise every full device refresh (10 minutes by default, and at least 30 minutes on Remote). The hourly layout check reads the list too, and counts as one of these reads. A restart or reinstate shows within about a second. A controller going offline shows within about one device status interval. A change that moves neither count and logs no event, such as a firmware version, can take up to the full refresh interval to show.
+- **Layout:** every hour, the integration reads the device tree and the controller list again. It adds new doors and devices, and removes devices that are no longer on the server.
 
 If the device read or an event log read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
 
@@ -256,7 +256,7 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
 - Controller status and the summary are polled, not pushed. Paxton accepts the live feed's controller status and battery subscriptions but sent nothing during a live controller restart and reinstate, so the integration doesn't use them. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list. Only type 12, which Paxton logs when a controller restarts or is reinstated, has been seen on a live site.
 - The Connectivity mapping comes from the Paxton10 web app's status list. Online and refreshing have been seen live. Offline, on battery, updating, rebooting, and reinstating haven't yet.
-- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes, or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller at the 10-minute default (it was about 165 MB a day per controller at 30 seconds), plus a few tens of MB a day for the rest, depending on how busy the doors are.
+- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes (30 on Remote), or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller on Direct at the 10-minute default, and about 3 MB a day per controller on Remote. It was about 165 MB a day per controller at 30 seconds. The rest adds about 25 MB a day, depending on how busy the doors are. On Remote, all of it goes through Paxton's relay, which Paxton doesn't support for this use and could limit.
 - The server isn't discovered automatically. Enter its address yourself.
 
 ## Safety rules

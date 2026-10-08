@@ -19,7 +19,13 @@ from typing import Any
 
 from .api import PaxtonAuthError, PaxtonError
 from .connection import PaxtonConnection, PaxtonForbidden, PaxtonNotFound
-from .const import DEFAULT_DEVICE_FULL_INTERVAL, EVENT_PAGE_SIZE, HARDWARE_EVENT_TYPES
+from .const import (
+    DEFAULT_DEVICE_FULL_INTERVAL,
+    EVENT_PAGE_SIZE,
+    HARDWARE_EVENT_TYPES,
+    REMOTE_DEVICE_FULL_INTERVAL,
+    ROUTE_REMOTE,
+)
 from .discovery import read_devices, read_door_states, read_summary
 from .hub import (
     METHOD_SUBSCRIBE_DOOR_STATE,
@@ -151,8 +157,13 @@ class PollingSource(UpdateSource):
         self._door_pushed_at: dict[int, float] = {}  # door id -> when its last live state arrived
 
     def set_site(self, site: Site) -> None:
-        """Use a rediscovered layout from the next poll on."""
+        """Use a rediscovered layout from the next poll on.
+
+        Rediscovery has just read the controller list, so that counts as the next full read.
+        """
         self._site = site
+        if site.can_read_devices:
+            self._devices_read_at = _monotonic()
 
     async def async_start(self, callback: UpdateCallback) -> None:
         self._callback = callback
@@ -248,7 +259,10 @@ class PollingSource(UpdateSource):
                 update.door_states = {
                     door: state for door, state in states.items() if self._door_pushed_at.get(door, -1.0) < started
                 }
-        due = _monotonic() - self._devices_read_at >= self._device_full_interval
+        interval = self._device_full_interval
+        if self._conn.active_route == ROUTE_REMOTE:
+            interval = max(interval, REMOTE_DEVICE_FULL_INTERVAL)
+        due = _monotonic() - self._devices_read_at >= interval
         if self._site.can_read_devices and (full or due or self._devices_requested or not self._site.can_read_summary):
             # Consume the request now: one that arrives during the read (a hardware event on the
             # live feed) must survive it, so the next poll reads the list again.
