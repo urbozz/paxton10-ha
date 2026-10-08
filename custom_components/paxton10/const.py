@@ -17,6 +17,7 @@ ROUTE_REMOTE = "remote"
 # Options
 OPT_ALLOW_DOOR_CONTROL = "allow_door_control"
 OPT_DEVICE_INTERVAL = "device_interval"
+OPT_DEVICE_FULL_INTERVAL = "device_full_interval"
 OPT_EVENT_INTERVAL = "event_interval"
 OPT_FALLBACK = "fallback"
 OPT_FALLBACK_TARGET = "fallback_target"
@@ -24,6 +25,8 @@ OPT_INCLUDE_USER_NAMES = "include_user_names"
 OPT_INCLUDE_CREDENTIAL_NAMES = "include_credential_names"
 
 DEFAULT_DEVICE_INTERVAL = 30
+DEFAULT_DEVICE_FULL_INTERVAL = 600  # the controller list is ~57 KB per controller, so read it sparingly
+MIN_DEVICE_FULL_INTERVAL = 60
 DEFAULT_EVENT_INTERVAL = 10
 MIN_EVENT_INTERVAL = 5
 MIN_DEVICE_INTERVAL = 10
@@ -90,3 +93,17 @@ CREDENTIAL_TYPES: dict[str, str] = {
     "pin": "pin",
     "password": "password",
 }
+
+
+# Event types that mean a controller or panel changed state: they trigger an early read of the
+# device list. From the web app's DMSEventType enum; none seen live yet (a quiet site has none).
+HARDWARE_EVENT_TYPES = frozenset(
+    {
+        12, 13, 14,  # serial device online, offline, detected
+        15,  # firmware updated
+        19, 20,  # tamper active, restored
+        21, 22,  # power failure, restored
+        50, 51, 52,  # battery discharging, low, critical
+        300, 301, 302, 303, 304, 305, 306,  # controller added, removed, modified, online, offline, detected, new firmware
+    }
+)

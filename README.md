@@ -66,7 +66,8 @@ Open the integration and click **Configure**.
 | Option | Default | Description |
 |---|---|---|
 | Allow door control | Off | Adds an **Open** button for each door and the gate. When off, Home Assistant creates no buttons and the client refuses every write. |
-| Device status interval | 30 s | How often to read controllers, entry panels, the system summary, and door lock state. Minimum 10 s. |
+| Device status interval | 30 s | How often to read the system summary and door lock state. These are small. Minimum 10 s. |
+| Full device refresh | 10 min | How often to read the full controller and entry panel list when nothing has changed. It's large, so it's also read straight away when it's needed: see [How data updates](#how-data-updates). Minimum 60 s. |
 | Event interval | 10 s | How often to read the event log while the live feed is down. Minimum 5 s. |
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
@@ -160,7 +161,8 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 - **Events:** live, on Direct and Remote. The integration subscribes to the server's live event feed, the same one the Paxton10 web app uses, and fires each event as it arrives. On Direct that's usually within a second. Fob and card events carry the user's name. Software opens don't, so with **Include user names in events** on, those first wait for one event log read to get the name; if that read fails, the event still fires, without the name. Every 5 minutes the integration also reads the event log, in case the feed missed one.
 - **Events while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
 - **Door lock state:** live on the same feed, and also read with every device status poll. A poll never overwrites a newer live update.
-- **Device status and summary:** every device status interval.
+- **Summary:** every device status interval (30 s by default).
+- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware): the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (offline, online, power failure, battery low, and similar), and otherwise every full device refresh (10 minutes by default). A controller going offline shows within about one device status interval. A change that moves neither count and logs no event, such as a firmware version, can take up to the full refresh interval to show.
 - **Layout:** every hour, the integration reads the device tree again. It adds new doors and devices, and removes devices that are no longer on the server.
 
 If the device read or an event log read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
@@ -237,9 +239,9 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - The Lock sensor shows the lock state, not whether the door is physically open. Paxton only reports forced or left open with a door contact fitted, and the integration then shows it as unlocked, with `door_state` set to `forced_or_left_open`.
 - The **Forced or left open** sensor is untested on a live site. The forced and left open door events (`forced`, `left_open`) are separate: they come from Paxton's events, live or from the log, and don't depend on this sensor.
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
-- Device status and the summary are always polled.
+- Device status and the summary are always polled. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list, and haven't been seen on a live site yet.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
-- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. With 10 controllers at the default 30 s interval, that's about 1.6 GB a day on the local network. Raise the device status interval if that matters.
+- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes, or when something changes, rather than every 30 seconds: for 13 controllers, about 150 MB a day in total instead of over 2 GB.
 - The server isn't discovered automatically. Enter its address yourself.
 - When the integration switches from the fallback route back to the main route, a call already in flight on the fallback connection can fail. The next poll uses the main route.
 

@@ -37,12 +37,15 @@ from .const import (
     CONF_ROUTE,
     CONF_TARGET,
     CONF_USERNAME,
+    DEFAULT_DEVICE_FULL_INTERVAL,
     DEFAULT_DEVICE_INTERVAL,
     DEFAULT_EVENT_INTERVAL,
     DOMAIN,
+    MIN_DEVICE_FULL_INTERVAL,
     MIN_DEVICE_INTERVAL,
     MIN_EVENT_INTERVAL,
     OPT_ALLOW_DOOR_CONTROL,
+    OPT_DEVICE_FULL_INTERVAL,
     OPT_DEVICE_INTERVAL,
     OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
@@ -313,6 +316,15 @@ class Paxton10OptionsFlow(OptionsFlow):
                 probatio.Required(OPT_DEVICE_INTERVAL, default=DEFAULT_DEVICE_INTERVAL): NumberSelector(
                     NumberSelectorConfig(
                         min=MIN_DEVICE_INTERVAL, max=3600, step=1, unit_of_measurement="s", mode=NumberSelectorMode.BOX
+                    )
+                ),
+                probatio.Required(OPT_DEVICE_FULL_INTERVAL, default=DEFAULT_DEVICE_FULL_INTERVAL): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_DEVICE_FULL_INTERVAL,
+                        max=86400,
+                        step=1,
+                        unit_of_measurement="s",
+                        mode=NumberSelectorMode.BOX,
                     )
                 ),
                 probatio.Required(OPT_EVENT_INTERVAL, default=DEFAULT_EVENT_INTERVAL): NumberSelector(

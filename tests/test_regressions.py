@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
@@ -133,7 +133,7 @@ async def test_issue2_event_poll_does_not_clear_device_failure(hass: HomeAssista
     entry = await setup(hass)
     server.status[DEVICES] = 500
     with pytest.raises(PaxtonError):
-        await source(entry).poll_devices()
+        await source(entry).poll_devices(full=True)
     assert source(entry)._callback
     await source(entry)._callback(SourceUpdate("devices", error=PaxtonError("HTTP 500")))
     await hass.async_block_till_done()
@@ -149,7 +149,7 @@ async def test_issue2_event_poll_does_not_clear_device_failure(hass: HomeAssista
 
     # Only a successful device poll brings entities back.
     server.status.clear()
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_ON
 
@@ -162,7 +162,7 @@ async def test_issue2_device_data_held_while_events_fail(hass: HomeAssistant, se
 
     # A device poll succeeds and finds a controller offline, but the event read is still failing.
     server.controllers = [controller(4001, 2001, status=4)]
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_UNAVAILABLE
     assert coordinator(entry).data.devices[4001].online is False
@@ -316,7 +316,7 @@ async def test_issue9_device_registry_follows_changes(hass: HomeAssistant, serve
     entry = await setup(hass)
     devices = dr.async_get(hass)
     server.controllers[0]["FirmwareVersion"] = "3.01.0"
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     ctrl = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id)
     assert ctrl and ctrl.sw_version == "3.01.0"
@@ -390,7 +390,7 @@ async def test_issue10_seen_ids_are_bounded(server: FakeServer, monkeypatch: pyt
 
     from custom_components.paxton10 import source as source_mod
 
-    src = source_mod.PollingSource(AsyncMock(), AsyncMock(), 30, 10, False)
+    src = source_mod.PollingSource(AsyncMock(), MagicMock(summary={}), 30, 10, False)
     src._seen = deque(maxlen=2)
     for n in (1, 2, 2, 3):
         src._remember(eid(n))
@@ -426,7 +426,7 @@ async def test_issue11_door_via_controller(hass: HomeAssistant, server: FakeServ
 
     # Rewiring the door to no controller moves it back under the server on the next device poll.
     server.controllers[0]["Connectors"] = []
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
     assert door and door.via_device_id == srv.id

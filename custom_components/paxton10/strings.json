@@ -110,6 +110,7 @@
         "data": {
           "allow_door_control": "Allow door control",
           "device_interval": "Device status interval",
+          "device_full_interval": "Full device refresh",
           "event_interval": "Event interval",
           "fallback": "Use a fallback route",
           "fallback_target": "Fallback address or remote ID",
@@ -118,7 +119,8 @@
         },
         "data_description": {
           "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant sends no writes at all.",
-          "device_interval": "How often to read controller and entry panel status, and door lock state.",
+          "device_interval": "How often to read the system summary and door lock state. A change in the offline device or alarm counts triggers a full device refresh.",
+          "device_full_interval": "How often to read the full controller and entry panel list (firmware, battery, and status details) when nothing has changed. It's also read straight away when the offline device or alarm counts change, or a controller reports a hardware event. Minimum 60 seconds.",
           "event_interval": "Events arrive live from the server. This is how often to read the event log while the live connection is down. Minimum 5 seconds.",
           "fallback": "If the configured route fails, try the other one ({other_route}).",
           "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",

@@ -263,12 +263,12 @@ async def test_device_poll_and_unavailable(
     assert state(hass, "sensor", 4001, "status") == "online"
     # On battery after a mains failure: still connected, and the status says why.
     server.controllers = [controller(4001, 2001, status=2)]
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_ON
     assert state(hass, "sensor", 4001, "status") == "online_on_battery"
     server.controllers = [controller(4001, 2001, status=4)]
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_OFF
     assert state(hass, "sensor", 4001, "status") == "offline"
@@ -283,7 +283,7 @@ async def test_device_poll_and_unavailable(
 
     server.down.clear()
     server.controllers = [controller(4001, 2001)]
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_ON
 
@@ -361,7 +361,7 @@ async def test_token_expiry_signs_in_again(hass: HomeAssistant, server: FakeServ
     entry = await setup(hass)
     before = server.tokens
     server.expire_tokens = 1
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     assert server.tokens == before + 1
     assert coordinator(entry).last_update_success
 
@@ -379,7 +379,7 @@ async def test_auth_failure_later_starts_reauth(hass: HomeAssistant, server: Fak
     server.expire_tokens = 2
     # The poll gets a 401, signs in again, and the server rejects the stored hash.
     with pytest.raises(PaxtonAuthError):
-        await source(entry).poll_devices()
+        await source(entry).poll_devices(full=True)
     assert source(entry)._callback
     await source(entry)._callback(SourceUpdate("devices", error=PaxtonAuthError("rejected")))
     await hass.async_block_till_done()
@@ -469,7 +469,7 @@ async def test_permission_lost_while_running(hass: HomeAssistant, server: FakeSe
     entry = await setup(hass)
     server.status["/api/v1/Devices/1/false?page=0&pageSize=100"] = 403
     server.status["/api/v1/System/Summary"] = 403
-    await source(entry).poll_devices()
+    await source(entry).poll_devices(full=True)
     assert not source(entry)._site.can_read_devices
     assert not source(entry)._site.can_read_summary
 

@@ -19,7 +19,7 @@ from typing import Any
 
 from .api import PaxtonAuthError, PaxtonError
 from .connection import PaxtonConnection, PaxtonForbidden, PaxtonNotFound
-from .const import EVENT_PAGE_SIZE
+from .const import DEFAULT_DEVICE_FULL_INTERVAL, EVENT_PAGE_SIZE, HARDWARE_EVENT_TYPES
 from .discovery import read_devices, read_door_states, read_summary
 from .hub import (
     METHOD_SUBSCRIBE_DOOR_STATE,
@@ -81,6 +81,27 @@ class SourceUpdate:
 UpdateCallback = Callable[[SourceUpdate], Awaitable[None]]
 
 
+def _watch(summary: dict[str, int]) -> tuple[int | None, int | None]:
+    """The summary counts that change when a device does."""
+    return summary.get("offline_devices"), summary.get("unacknowledged_alarms")
+
+
+async def _nap(delay: float, wake: asyncio.Event | None) -> None:
+    """Sleep for delay, or until wake is set."""
+    if wake is None:
+        await _sleep(delay)
+        return
+    sleeper = asyncio.ensure_future(_sleep(delay))
+    waker = asyncio.ensure_future(wake.wait())
+    try:
+        await asyncio.wait({sleeper, waker}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in (sleeper, waker):
+            task.cancel()
+        await asyncio.gather(sleeper, waker, return_exceptions=True)
+        wake.clear()
+
+
 class UpdateSource(ABC):
     """Delivers device state and new events to a callback."""
 
@@ -104,6 +125,7 @@ class PollingSource(UpdateSource):
         event_interval: float,
         include_user_names: bool,
         include_credential_names: bool = False,
+        device_full_interval: float = DEFAULT_DEVICE_FULL_INTERVAL,
     ) -> None:
         self._conn = conn
         self._site = site
@@ -111,6 +133,11 @@ class PollingSource(UpdateSource):
         self._event_interval = event_interval
         self._include_user_names = include_user_names
         self._include_credential_names = include_credential_names
+        self._device_full_interval = device_full_interval
+        self._devices_read_at = _monotonic()  # discovery has just read the device list
+        self._devices_requested = False
+        self._device_wake = asyncio.Event()
+        self._summary_watch = _watch(site.summary)
         self._callback: UpdateCallback | None = None
         self._tasks: list[asyncio.Task[None]] = []
         self.last_event_id: str | None = None  # newest event seen, for diagnostics
@@ -138,7 +165,8 @@ class PollingSource(UpdateSource):
         if self._site.can_read_devices or self._site.can_read_summary or self._site.can_read_door_states:
             self._tasks.append(
                 loop.create_task(
-                    self._run(self.poll_devices, self._device_interval, KIND_DEVICES), name="paxton10 devices"
+                    self._run(self.poll_devices, self._device_interval, KIND_DEVICES, wake=self._device_wake),
+                    name="paxton10 devices",
                 )
             )
         self._tasks.append(loop.create_task(self._events_loop(), name="paxton10 events"))
@@ -160,10 +188,12 @@ class PollingSource(UpdateSource):
         self._tasks.clear()
         self._callback = None
 
-    async def _run(self, poll: Callable[[], Awaitable[None]], interval: float, kind: str) -> None:
+    async def _run(
+        self, poll: Callable[[], Awaitable[None]], interval: float, kind: str, wake: asyncio.Event | None = None
+    ) -> None:
         failures = 0
         while True:
-            await _sleep(min(interval * (2**failures), MAX_BACKOFF) if failures else interval)
+            await _nap(min(interval * (2**failures), MAX_BACKOFF) if failures else interval, wake)
             if self.auth_failed:
                 return
             try:
@@ -186,19 +216,23 @@ class PollingSource(UpdateSource):
                 if self._callback:
                     await self._callback(SourceUpdate(kind, error=PaxtonError(str(err))))
 
-    async def poll_devices(self) -> None:
+    async def poll_devices(self, full: bool = False) -> None:
+        """Cheap reads every time; the controller list only when it's needed.
+
+        The summary and door states are a few hundred bytes. The controller list is about 57 KB
+        per controller, so it's read when asked (full), when a hardware event asked for it, when
+        the summary's offline or alarm counts change, when the account can't read the summary
+        (nothing else would show a change), or once the full refresh interval has passed.
+        """
         update = SourceUpdate(KIND_DEVICES)
-        if self._site.can_read_devices:
-            try:
-                update.devices = await read_devices(self._conn)
-                name_hardware(update.devices, self._site.doors)
-            except PaxtonForbidden:
-                self._site.can_read_devices = False
         if self._site.can_read_summary:
             try:
                 update.summary = await read_summary(self._conn)
             except PaxtonForbidden:
                 self._site.can_read_summary = False
+        if update.summary is not None and (watch := _watch(update.summary)) != self._summary_watch:
+            self._summary_watch = watch
+            full = True
         if self._site.can_read_door_states:
             started = _monotonic()
             try:
@@ -210,8 +244,22 @@ class PollingSource(UpdateSource):
                 update.door_states = {
                     door: state for door, state in states.items() if self._door_pushed_at.get(door, -1.0) < started
                 }
+        due = _monotonic() - self._devices_read_at >= self._device_full_interval
+        if self._site.can_read_devices and (full or due or self._devices_requested or not self._site.can_read_summary):
+            self._devices_requested = False
+            try:
+                update.devices = await read_devices(self._conn)
+                name_hardware(update.devices, self._site.doors)
+                self._devices_read_at = _monotonic()
+            except PaxtonForbidden:
+                self._site.can_read_devices = False
         if self._callback:
             await self._callback(update)
+
+    def request_device_refresh(self) -> None:
+        """Read the device list on the next device poll, and wake the device loop for it now."""
+        self._devices_requested = True
+        self._device_wake.set()
 
     async def poll_events(self) -> None:
         body = await self._conn.post(EVENTS_PATH, event_filter(self._site.server.utc_offset_minutes))
@@ -236,6 +284,9 @@ class PollingSource(UpdateSource):
             for e in reversed(events):
                 if e.event_id not in self._seen_set and e.event_id not in {n.event_id for n in new}:
                     new.append(e)
+        if any(e.event_type_id in HARDWARE_EVENT_TYPES for e in new):
+            # A controller went offline, lost power, and so on: show it now, not at the next full read.
+            self.request_device_refresh()
         if (new or report_empty) and self._callback:
             await self._callback(SourceUpdate(KIND_EVENTS, events=new))
         # Mark events seen only once they are delivered. If the callback raised,
