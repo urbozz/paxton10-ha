@@ -1,0 +1,46 @@
+name: Release asset
+
+# HACS installs paxton10.zip from each release (zip_release in hacs.json), not GitHub's
+# source archive, which can return 404 for a few minutes after a new tag is created.
+# Releases created with the asset already attached are only checked.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build the asset for
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  asset:
+    name: Build and attach paxton10.zip
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Check the tag matches the manifest version
+        run: |
+          version=$(jq -r .version custom_components/paxton10/manifest.json)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG doesn't match manifest version $version"
+            exit 1
+          fi
+      - name: Attach paxton10.zip if missing
+        run: |
+          if gh release view "$TAG" --json assets -q '.assets[].name' | grep -qx paxton10.zip; then
+            echo "paxton10.zip is already attached to $TAG"
+            exit 0
+          fi
+          cd custom_components/paxton10
+          zip -r -X ../../paxton10.zip . -x '*__pycache__*'
+          cd ../..
+          gh release upload "$TAG" paxton10.zip

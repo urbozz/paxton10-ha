@@ -138,6 +138,9 @@ class PollingSource(UpdateSource):
                 await task
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                # A task that already ended with an error mustn't stop the rest of the shutdown.
+                _LOGGER.exception("Paxton10 update task %s had failed", task.get_name())
         self._tasks.clear()
         self._callback = None
 
@@ -258,6 +261,11 @@ class LiveSource(PollingSource):
                 if self._callback:
                     await self._callback(SourceUpdate(KIND_EVENTS, error=err))
                 return
+            except Exception:
+                # Never let the events task end on a bug: device polling would carry on and hide it.
+                _LOGGER.exception("Unexpected error in the Paxton10 event loop")
+                failures = min(failures + 1, 6)
+                await _sleep(self._event_interval)
 
     async def _hub_cycle(self, failures: int) -> int:
         """Connect, subscribe, and listen until the hub fails. Returns the new failure count.
@@ -308,7 +316,8 @@ class LiveSource(PollingSource):
                 if self._include_user_names and any(_unnamed_user(row) for row in rows):
                     # Live rows carry the user's id but not their name. The event log row has the
                     # name, so fire from there. Anything not on the page yet still fires below.
-                    await self._poll_once()
+                    # A failed lookup only costs the name, so it doesn't make entities unavailable.
+                    await self._poll_once(report=False)
                 await self._deliver(events)
             if _monotonic() - last_reconcile >= RECONCILE_INTERVAL:
                 await self._poll_once()
@@ -319,14 +328,23 @@ class LiveSource(PollingSource):
         # A push can hold several rows. Order them like a log page, newest first, by event time.
         return sorted(events, key=lambda e: e.time or NO_TIME, reverse=True)
 
-    async def _poll_once(self) -> None:
-        """One event poll. Reports a read failure like the polling loop. Raises PaxtonAuthError."""
+    async def _poll_once(self, report: bool = True) -> None:
+        """One event poll. Raises PaxtonAuthError; other failures never escape.
+
+        With report, a failed read is reported like the polling loop's, which marks entities
+        unavailable until a read succeeds. Without it, the failure is only logged.
+        """
         try:
             await self.poll_events()
         except PaxtonAuthError:
             raise
-        except PaxtonError as err:
-            if self._callback:
+        except Exception as err:
+            if not isinstance(err, PaxtonError):
+                _LOGGER.exception("Unexpected error reading the Paxton10 event log")
+                err = PaxtonError(str(err))
+            if not report:
+                _LOGGER.debug("Paxton10 event log read failed: %s", err)
+            elif self._callback:
                 await self._callback(SourceUpdate(KIND_EVENTS, error=err))
 
     async def _poll_for(self, seconds: float) -> None:

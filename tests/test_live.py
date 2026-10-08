@@ -533,3 +533,115 @@ async def test_live_takes_user_names_from_the_event_log(
     await until(lambda: len(fired) == 4, hass)
     assert len(server.sent("POST", EVENTS)) == polls + 2
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+# Review fixes: a failed task, a failed lookup, or a bug must not stop events or the shutdown.
+
+
+async def test_stop_survives_a_failed_task(hass: HomeAssistant, server: FakeServer, fast_sleep: list[float]) -> None:
+    entry = await setup(hass)
+    src = live(entry)
+
+    async def boom() -> None:
+        raise RuntimeError("task bug")
+
+    failed = asyncio.get_running_loop().create_task(boom(), name="paxton10 test")
+    await asyncio.sleep(0)
+    src._tasks.append(failed)
+    await src.async_stop()  # logs the failed task instead of raising
+    assert src._tasks == []
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_shutdown_closes_the_connection_even_if_stop_fails(
+    hass: HomeAssistant, server: FakeServer, fast_sleep: list[float]
+) -> None:
+    from custom_components.paxton10.coordinator import Paxton10Coordinator
+
+    entry = await setup(hass)
+    coordinator: Paxton10Coordinator = entry.runtime_data
+    src = live(entry)
+    await src.async_stop()
+    closed: list[bool] = []
+    real_close = coordinator.conn.close
+
+    async def close() -> None:
+        closed.append(True)
+        await real_close()
+
+    async def broken_stop() -> None:
+        raise RuntimeError("stop failed")
+
+    with (
+        patch.object(coordinator.conn, "close", close),
+        patch.object(src, "async_stop", broken_stop),
+        pytest.raises(RuntimeError),
+    ):
+        await coordinator.async_shutdown()
+    assert closed == [True]
+
+
+async def test_events_loop_survives_unexpected_errors(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float], caplog: pytest.LogCaptureFixture
+) -> None:
+    entry = await setup(hass)
+    src = live(entry)
+    await src.async_stop()
+    received: list[Any] = []
+
+    async def cb(update: Any) -> None:
+        received.append(update)
+
+    src._callback = cb
+    calls = {"hub": 0, "poll": 0}
+
+    async def hub_down() -> Any:
+        calls["hub"] += 1
+        if calls["hub"] == 3:
+            raise PaxtonAuthError("stop the test")
+        raise PaxtonError("hub down")
+
+    async def poll_events() -> None:
+        calls["poll"] += 1
+        raise TypeError("malformed row")  # a parser bug in the fallback poll
+
+    real_poll_for = src._poll_for
+    poll_for_calls = {"n": 0}
+
+    async def poll_for(seconds: float) -> None:
+        poll_for_calls["n"] += 1
+        if poll_for_calls["n"] == 1:
+            raise RuntimeError("bug in the fallback")  # escapes _poll_for itself
+        await real_poll_for(seconds)
+
+    with (
+        patch.object(src._conn, "hub_target", hub_down),
+        patch.object(src, "poll_events", poll_events),
+        patch.object(src, "_poll_for", poll_for),
+    ):
+        await src._events_loop()
+    # The loop carried on past both bugs, and only stopped on the auth failure.
+    assert calls["hub"] == 3 and calls["poll"] >= 1
+    assert "Unexpected error in the Paxton10 event loop" in caplog.text
+    assert "Unexpected error reading the Paxton10 event log" in caplog.text
+    errors = [type(u.error).__name__ for u in received if u.error]
+    assert errors[-1] == "PaxtonAuthError" and "PaxtonError" in errors
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_failed_name_lookup_keeps_entities_available(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
+) -> None:
+    from custom_components.paxton10.const import OPT_INCLUDE_USER_NAMES
+
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    fired = capture(hass)
+    server.status[EVENTS] = 500
+    hub.pushes.put_nowait([event(101, 5, user={"UserId": 7})])
+    await until(lambda: len(fired) == 1, hass)
+    assert fired[0].data.get("user_name") is None
+    assert entry.runtime_data.last_update_success
+    server.status.clear()
+    await hass.config_entries.async_unload(entry.entry_id)

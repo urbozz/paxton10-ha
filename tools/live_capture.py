@@ -181,7 +181,12 @@ async def capture(
 
 def write_report(path: str | None, log: list[dict[str, Any]], events: list[dict[str, Any]]) -> None:
     out = Path(path or "probe-live-direct.json")
-    out.write_text(json.dumps({"log": log, "events": events}, indent=1, ensure_ascii=False), encoding="utf-8")
+    try:
+        out.write_text(json.dumps({"log": log, "events": events}, indent=1, ensure_ascii=False), encoding="utf-8")
+    except OSError as err:
+        # Don't hide the real outcome, such as a failed sign-in, behind a report error.
+        print(f"\nCouldn't write the report to {out}: {err}")
+        return
     print(f"\n{len(events)} live event(s). Report: {out}")
 
 
@@ -194,7 +199,8 @@ def main() -> int:
     try:
         return asyncio.run(run(parser.parse_args()))
     except KeyboardInterrupt:
-        # The hub client has already unsubscribed and aborted in run()'s finally.
+        # Ctrl+C cancels the capture task, so capture()'s finally has already unsubscribed and
+        # aborted the hub, and run()'s finally has written the report.
         print("\nStopped.")
         return 0
 

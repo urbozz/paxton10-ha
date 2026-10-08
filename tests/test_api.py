@@ -252,3 +252,24 @@ async def test_remote_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         await transport.send("GET", "/x", None, None, "application/json")
     assert transport._pending == {}
     await transport.close()
+
+
+@pytest.mark.parametrize(
+    ("break_it", "match"),
+    [
+        ("client_error", "remote connect: ClientConnectionError: refused"),
+        ("timeout", "remote connect: no reply within 20 s"),
+        ("no_url", "remote connect: KeyError: 'url'"),
+    ],
+)
+async def test_remote_start_wraps_network_errors(break_it: str, match: str) -> None:
+    """Regression: a timeout or client error on Remote escaped as a non-PaxtonError and could end the events task."""
+    session = fake_session(FakeWS())
+    if break_it == "client_error":
+        session.get = MagicMock(side_effect=aiohttp.ClientConnectionError("refused"))
+    elif break_it == "timeout":
+        session.get = MagicMock(side_effect=TimeoutError())
+    else:
+        session.get = MagicMock(return_value=FakeResp(200, {"accessToken": "at"}))
+    with pytest.raises(PaxtonError, match=match):
+        await RemoteTransport(session, "abc123").start()

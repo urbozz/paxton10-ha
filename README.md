@@ -150,12 +150,12 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 
 ## How data updates
 
-- **Events on Direct:** live. The integration subscribes to the server's live event feed, the same one the Paxton10 web app uses, and fires each event as it arrives, usually within a second. Every 5 minutes it also reads the event log, in case the feed missed one.
+- **Events on Direct:** live. The integration subscribes to the server's live event feed, the same one the Paxton10 web app uses, and fires each event as it arrives, usually within a second. The feed doesn't carry user names, so with **Include user names in events** on, an event about a user first waits for one event log read to get the name. If that read fails, the event still fires, without the name. Every 5 minutes the integration also reads the event log, in case the feed missed one.
 - **Events on Remote, or while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
 - **Device status and summary:** every device status interval.
 - **Layout:** every hour, the integration reads the device tree again. It adds new doors and devices, and removes devices that are no longer on the server.
 
-If the device read or the event read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
+If the device read or an event log read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
 
 An event never fires twice, even when it arrives both live and from the event log. A live feed failure on its own doesn't make entities unavailable, because the event log covers the gap. Home Assistant logs at info level when the live feed connects and when it falls back to polling. Diagnostics show which is in use as `event_source`: `live` or `polling`.
 

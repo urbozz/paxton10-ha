@@ -144,6 +144,18 @@ class RemoteTransport:
         self._open = False
 
     async def start(self) -> None:
+        """Connect to the relay. Every failure is a PaxtonError, as on the Direct transport."""
+        try:
+            await self._start()
+        except PaxtonError:
+            raise
+        except asyncio.TimeoutError as err:
+            raise PaxtonError("remote connect: no reply within 20 s") from err
+        except (aiohttp.ClientError, KeyError, TypeError, ValueError, AttributeError) as err:
+            # Some aiohttp errors have an empty str(), so always name the type.
+            raise PaxtonError(f"remote connect: {type(err).__name__}: {err}".rstrip(": ")) from err
+
+    async def _start(self) -> None:
         timeout = aiohttp.ClientTimeout(total=20)
         async with self._session.get(NEGOTIATE_URL.format(remote_id=self._remote_id), timeout=timeout) as resp:
             if resp.status != 200:

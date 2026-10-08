@@ -86,7 +86,13 @@ def build_connection(hass: HomeAssistant, entry: ConfigEntry, options: EntryOpti
 
 
 class Paxton10Coordinator(DataUpdateCoordinator[Site]):
-    """Owns the connection and the update source. Data is pushed, never pulled on a timer."""
+    """Owns the connection and the update source.
+
+    The source pushes updates to the coordinator, so the coordinator itself never polls
+    (update_interval is None). Behind it, device status and the summary are polled, door events
+    are live on Direct (polled on Remote or while the live feed is down), and the layout is
+    rediscovered hourly.
+    """
 
     config_entry: Paxton10ConfigEntry
 
@@ -182,13 +188,16 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
         if self._unsub_rediscover:
             self._unsub_rediscover()
             self._unsub_rediscover = None
-        if self.source:
-            await self.source.async_stop()
-            self.source = None
-        await self.conn.close()
-        # Don't leave a repair behind for an integration that's unloaded or removed.
-        ir.async_delete_issue(self.hass, DOMAIN, self._fallback_issue_id)
-        await super().async_shutdown()
+        try:
+            if self.source:
+                await self.source.async_stop()
+                self.source = None
+        finally:
+            # Close the connection even if stopping the source failed.
+            await self.conn.close()
+            # Don't leave a repair behind for an integration that's unloaded or removed.
+            ir.async_delete_issue(self.hass, DOMAIN, self._fallback_issue_id)
+            await super().async_shutdown()
 
     async def _async_handle_update(self, update: SourceUpdate) -> None:
         if update.error is not None:

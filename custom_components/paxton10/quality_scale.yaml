@@ -6,7 +6,11 @@ rules:
   action-setup:
     status: exempt
     comment: No service actions. Door release is a button entity.
-  appropriate-polling: done  # devices 30 s, events 10 s, both configurable; hourly rediscovery
+  # Defaults: devices 30 s; events live on Direct (log read every 5 min), 10 s on Remote; hourly rediscovery.
+  # The two interval options stay on purpose (core integrations may not offer them): the controller list is
+  # about 57 KB per controller, so sites need to trade device-status freshness against bandwidth, and HA's
+  # own polling control can't pace this integration's own loops.
+  appropriate-polling: done
   brands: done  # brand/icon.png and icon@2x.png: Paxton's triangle mark, redrawn from paxton-access.com
   common-modules: done  # coordinator.py, entity.py, connection.py, models.py
   config-flow-test-coverage: done
