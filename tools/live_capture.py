@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Paxton10 live event capture: checks the integration's hub client against a live server.
+"""Paxton10 live capture: checks the integration's hub client and status reads against a live server.
 
-Signs in over Direct, opens the SignalR long poll with the integration's own hub client
-(hub.py), subscribes to live events, and prints every reply for a while. Open a door during
-the capture so an event arrives.
+Signs in over Direct and discovers the site as the integration does. Then it:
 
-Read-only: the only hub calls are SubscribeToLiveEvents and UnsubscribeFromLiveEvents, and
-the client refuses any other method.
+1. Reads door state with POST /api/v1/Appliance/Connector/Status, as the web app does.
+2. Opens the SignalR long poll with the integration's own hub client (hub.py) and subscribes
+   to live events, door state, controller and entry panel status, and controller batteries.
+3. Prints every push for a while, and saves a report.
+
+Open a door during the capture, and leave one open long enough to raise its left-open alarm.
+
+Read-only: the client only sends the hub's subscribe and unsubscribe methods, and the door
+state read is a query. Both clients refuse anything else.
 
 Privacy: strings are replaced by their length, except hub and method names, .NET "$type"
-names, and EventTime (to measure delay). Numbers, booleans, and list lengths are kept.
+names, state and status codes, and EventTime (to measure delay). Numbers are kept.
 
 Usage, from the repository root (needs only aiohttp):
     python3 tools/live_capture.py --direct 192.0.2.10
-    python3 tools/live_capture.py --direct 192.0.2.10 --seconds 120
+    python3 tools/live_capture.py --direct 192.0.2.10 --seconds 180
 Add --clipboard to read the password from the macOS clipboard.
 """
 
@@ -39,16 +44,27 @@ _pkg = types.ModuleType("paxton10")
 _pkg.__path__ = [str(_PKG)]
 sys.modules["paxton10"] = _pkg
 
-from paxton10.api import DirectTransport, PaxtonAuthError, PaxtonClient, PaxtonError
+from paxton10.api import PaxtonAuthError, PaxtonError, password_hash
+from paxton10.connection import PaxtonConnection
+from paxton10.const import ROUTE_DIRECT
+from paxton10.discovery import discover_site
 from paxton10.hub import (
+    METHOD_SUBSCRIBE_BATTERY,
+    METHOD_SUBSCRIBE_DEVICE_STATUS,
+    METHOD_SUBSCRIBE_DOOR_STATE,
     METHOD_SUBSCRIBE_EVENTS,
+    METHOD_UNSUBSCRIBE_BATTERY,
+    METHOD_UNSUBSCRIBE_DEVICE_STATUS,
+    METHOD_UNSUBSCRIBE_DOOR_STATE,
     METHOD_UNSUBSCRIBE_EVENTS,
+    NOTIFY_DOOR_STATE,
     LongPollHub,
     event_rows,
 )
-from paxton10.models import live_event_filter, parse_event, parse_time
+from paxton10.models import KIND_CONTROLLER, live_event_filter, parse_event, parse_time
 
-KEEP = {"$type", "H", "M", "EventTime", "Response"}
+# Strings kept as they are: names, codes, and times. Everything else is replaced by its length.
+KEEP = {"$type", "H", "M", "EventTime", "Response", "StateValue", "Status", "State", "Value"}
 
 
 def shape(value: Any, depth: int = 0, key: str = "") -> Any:
@@ -57,7 +73,7 @@ def shape(value: Any, depth: int = 0, key: str = "") -> Any:
     if isinstance(value, dict):
         return {k: shape(v, depth + 1, k) for k, v in value.items()}
     if isinstance(value, list):
-        return [shape(v, depth + 1) for v in value[:5]] + ([f"… {len(value) - 5} more"] if len(value) > 5 else [])
+        return [shape(v, depth + 1) for v in value[:20]] + ([f"… {len(value) - 20} more"] if len(value) > 20 else [])
     if isinstance(value, str):
         return value if key in KEEP else f"<str {len(value)}>"
     return value
@@ -102,43 +118,92 @@ async def run(args: argparse.Namespace) -> int:
         write_report(args.out, log, events)
 
 
+# The web app's ApplianceState values for doors; other values belong to other appliance types.
+DOOR_STATES = {1: "open_unlocked", 2: "locked", 3: "forced_or_left_open", 4: "offline", 5: "online"}
+DOOR_STATE_PATH = "/api/v1/Appliance/Connector/Status"
+
+
+def door_state_summary(rows: Any) -> list[str]:
+    out = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            value = int(row.get("StateValue"))
+        except (TypeError, ValueError):
+            value = None
+        out.append(f"{row.get('EntityId')}: {row.get('StateValue')!r} ({DOOR_STATES.get(value, 'not a door state')})")
+    return out
+
+
 async def capture(
     args: argparse.Namespace, username: str, password: str, log: list[dict[str, Any]], events: list[dict[str, Any]]
 ) -> int:
     async with aiohttp.ClientSession() as session:
-        transport = DirectTransport(session, args.direct)
-        client = PaxtonClient(transport)
+        conn = PaxtonConnection(session, ROUTE_DIRECT, args.direct, username, password_hash(password))
+        del password
         try:
-            await client.sign_in(username, password)
+            site = await discover_site(conn)
+            target = await conn.hub_target()
         except PaxtonAuthError as err:
             print(f"Sign-in failed: {err}")
+            await conn.close()
             return 1
         except PaxtonError as err:
             print(f"Connection failed: {err}")
+            await conn.close()
             return 1
-        finally:
-            del password
-        params = await client.get("/api/v2/System/Parameters/All")
-        regional = params.body.get("RegionalSettings") or {} if isinstance(params.body, dict) else {}
-        offset = int(regional.get("MinutesUtcOffset") or 0)
-        print(f"Signed in. UTC offset {offset} min. Opening the hub.\n")
+        assert target
+        offset = site.server.utc_offset_minutes
+        door_ids = sorted(site.doors)
+        device_ids = sorted(site.devices)
+        controller_ids = sorted(i for i, d in site.devices.items() if d.kind == KIND_CONTROLLER)
+        print(f"Signed in. UTC offset {offset} min. {len(door_ids)} doors, {len(device_ids)} devices.\n")
 
-        hub = RecordingHub(session, transport.base_url, lambda: client.token, log=log)
+        async def read_door_state(when: str) -> None:
+            """Door state the way the web app loads it before subscribing."""
+            try:
+                states = await conn.post(DOOR_STATE_PATH, door_ids)
+                log.append({"request": f"POST {DOOR_STATE_PATH} ({when})", "reply": shape(states)})
+                print(f"POST {DOOR_STATE_PATH} ({when}): {json.dumps(shape(states))[:600]}")
+                for line in door_state_summary(states):
+                    print(f"  door {line}")
+            except PaxtonError as err:
+                log.append({"request": f"POST {DOOR_STATE_PATH} ({when})", "error": str(err)})
+                print(f"POST {DOOR_STATE_PATH} ({when}) failed: {err}")
+            print()
+
+        await read_door_state("before")
+
+        hub = RecordingHub(session, *target, log=log)
+        subscribed: list[str] = []
         try:
             await hub.connect()
             # Try the web app's live view filter first, then the site graphic's (every category listed).
             for all_categories in (False, True):
                 label = "every category listed" if all_categories else "categories unrestricted"
                 try:
-                    result = await hub.invoke(METHOD_SUBSCRIBE_EVENTS, live_event_filter(offset, all_categories))
+                    await hub.invoke(METHOD_SUBSCRIBE_EVENTS, live_event_filter(offset, all_categories))
                 except PaxtonError as err:
-                    print(f"\nSubscribe with {label} failed: {err}")
+                    print(f"Subscribe to events with {label} failed: {err}")
                     continue
-                print(f"\nSubscribed with {label} (result {shape(result)}).")
+                print(f"Subscribed to events with {label}.")
+                subscribed.append(METHOD_UNSUBSCRIBE_EVENTS)
                 break
-            else:
-                raise PaxtonError("every subscribe variant failed")
-            print(f"Listening for {args.seconds} s. Open a door now.\n")
+            for subscribe, unsubscribe, ids, what in (
+                (METHOD_SUBSCRIBE_DOOR_STATE, METHOD_UNSUBSCRIBE_DOOR_STATE, door_ids, "door state"),
+                (METHOD_SUBSCRIBE_DEVICE_STATUS, METHOD_UNSUBSCRIBE_DEVICE_STATUS, device_ids, "device status"),
+                (METHOD_SUBSCRIBE_BATTERY, METHOD_UNSUBSCRIBE_BATTERY, controller_ids, "battery"),
+            ):
+                try:
+                    result = await hub.invoke(subscribe, ids)
+                except PaxtonError as err:
+                    print(f"Subscribe to {what} failed: {err}")
+                    continue
+                print(f"Subscribed to {what} for {len(ids)} ids (result {json.dumps(shape(result))[:200]}).")
+                subscribed.append(unsubscribe)
+
+            print(f"\nListening for {args.seconds} s. Open a door now, and leave one open until it alarms.\n")
             deadline = time.monotonic() + args.seconds
             while time.monotonic() < deadline:
                 try:
@@ -148,6 +213,18 @@ async def capture(
                 received = datetime.now(timezone.utc)
                 for message in messages:
                     rows = event_rows(message)
+                    if not rows:
+                        # Door state, device status, battery, or anything else: show it all, redacted.
+                        print(f"  push {message.hub}.{message.method}: {json.dumps(shape(message.args))[:600]}")
+                        if message.method.lower() == NOTIFY_DOOR_STATE.lower() and message.args:
+                            for line in door_state_summary(message.args[0]):
+                                print(f"    door {line}")
+                        events.append({
+                            "received": received.isoformat(timespec="milliseconds"),
+                            "method": message.method,
+                            "args": shape(message.args),
+                        })
+                        continue
                     print(f"  push {message.hub}.{message.method}: {len(rows)} event row(s)")
                     for row in rows:
                         parsed = parse_event(row, False)
@@ -155,26 +232,31 @@ async def capture(
                         delay = (received - when).total_seconds() if when else None
                         summary = {
                             "received": received.isoformat(timespec="milliseconds"),
+                            "method": message.method,
                             "event_time": row.get("EventTime"),
                             "delay_s": round(delay, 2) if delay is not None else None,
                             "event_type_id": row.get("EventTypeId"),
                             "parsed_type": parsed.event_type if parsed else None,
                             "door_ids": list(parsed.door_ids) if parsed else None,
-                            "row_keys": sorted(row),
+                            "user_data": shape(row.get("UserData")),
                         }
                         events.append(summary)
                         print(f"    type {summary['event_type_id']} ({summary['parsed_type']}), doors "
                               f"{summary['door_ids']}, delay {summary['delay_s']} s")
+            print()
+            await read_door_state("after")
         except PaxtonError as err:
             print(f"\nHub failed: {err}")
         finally:
-            if hub.connected:
+            for unsubscribe in subscribed:
+                if not hub.connected:
+                    break
                 try:
-                    await hub.invoke(METHOD_UNSUBSCRIBE_EVENTS)
+                    await hub.invoke(unsubscribe)
                 except PaxtonError as err:
-                    print(f"Unsubscribe failed: {err}")
+                    print(f"{unsubscribe} failed: {err}")
             await hub.close()
-            await client.close()
+            await conn.close()
 
     return 0
 
@@ -193,7 +275,7 @@ def write_report(path: str | None, log: list[dict[str, Any]], events: list[dict[
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--direct", metavar="HOST", required=True, help="server address on the site network")
-    parser.add_argument("--seconds", type=int, default=60, help="how long to listen (default 60)")
+    parser.add_argument("--seconds", type=int, default=180, help="how long to listen (default 180)")
     parser.add_argument("--clipboard", action="store_true", help="read the password from the macOS clipboard")
     parser.add_argument("--out", help="report path (default probe-live-direct.json)")
     try:

@@ -161,7 +161,7 @@ async def test_issue2_device_data_held_while_events_fail(hass: HomeAssistant, se
     await hass.async_block_till_done()
 
     # A device poll succeeds and finds a controller offline, but the event read is still failing.
-    server.controllers = [controller(4001, 2001, status=2)]
+    server.controllers = [controller(4001, 2001, status=4)]
     await source(entry).poll_devices()
     await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_UNAVAILABLE

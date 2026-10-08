@@ -41,7 +41,28 @@ REQUEST_TIMEOUT = 20
 METHOD_SUBSCRIBE_EVENTS = "SubscribeToLiveEvents"
 METHOD_UNSUBSCRIBE_EVENTS = "UnsubscribeFromLiveEvents"
 NOTIFY_EVENTS = "newLiveEventNotification"
-HUB_METHOD_ALLOWLIST = frozenset({METHOD_SUBSCRIBE_EVENTS, METHOD_UNSUBSCRIBE_EVENTS})
+# Door state, controller status, and battery. Each subscribe takes a list of entity ids.
+METHOD_SUBSCRIBE_DOOR_STATE = "SubscribeToApplianceStateNotifications"
+METHOD_UNSUBSCRIBE_DOOR_STATE = "UnsubscribeFromApplianceStateNotifications"
+NOTIFY_DOOR_STATE = "applianceStateNotification"
+METHOD_SUBSCRIBE_DEVICE_STATUS = "SubscribeToDeviceStatusNotifications"
+METHOD_UNSUBSCRIBE_DEVICE_STATUS = "UnsubscribeFromDeviceStatusNotifications"
+NOTIFY_DEVICE_STATUS = "deviceStatusNotification"
+METHOD_SUBSCRIBE_BATTERY = "SubscribeToBatteryStatusUpdate"
+METHOD_UNSUBSCRIBE_BATTERY = "UnsubscribeToBatteryStatusUpdate"
+NOTIFY_BATTERY = "batteryStatusNotification"
+HUB_METHOD_ALLOWLIST = frozenset(
+    {
+        METHOD_SUBSCRIBE_EVENTS,
+        METHOD_UNSUBSCRIBE_EVENTS,
+        METHOD_SUBSCRIBE_DOOR_STATE,
+        METHOD_UNSUBSCRIBE_DOOR_STATE,
+        METHOD_SUBSCRIBE_DEVICE_STATUS,
+        METHOD_UNSUBSCRIBE_DEVICE_STATUS,
+        METHOD_SUBSCRIBE_BATTERY,
+        METHOD_UNSUBSCRIBE_BATTERY,
+    }
+)
 
 
 class HubDisconnected(PaxtonError):

@@ -95,7 +95,8 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 | Server | Total devices, Software version | Diagnostic. |
 | Door | Open (button) | Only when **Allow door control** is on. The door opens for its configured open time, then relocks. There's no lock command. |
 | Door | Event (event) | Named after the door, for example `event.main_entrance_door`. See [Events](#events). |
-| Controller and entry panel | Connectivity (binary sensor) | Diagnostic. |
+| Controller and entry panel | Connectivity (binary sensor) | Diagnostic. On while the device is connected to the server, including while it runs on battery, updates its firmware, or refreshes. Off while it's offline, rebooting, or reinstating. |
+| Controller and entry panel | Status | Diagnostic. `online`, `online_on_battery`, `updating`, `offline`, `refreshing`, `reinstating`, or `rebooting`, as the web app shows them. `online_on_battery` means the controller has lost mains power. |
 | Controller and entry panel | Firmware | Diagnostic. |
 | Controller and entry panel | IP address | Diagnostic. Disabled by default. |
 | Controller | Battery | Diagnostic. `good`, `low`, `critical`, or `not_connected` (no battery fitted). Matches the web app's battery icon, so a fitted battery that reports no charge shows its charging state as `low` (charging) or `critical` (discharging). |
@@ -198,6 +199,19 @@ actions:
   - action: notify.notify
     data:
       message: Main entrance door controller is offline
+```
+
+Alert when a controller loses mains power and runs on its battery:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: sensor.main_entrance_door_controller_status
+    to: online_on_battery
+actions:
+  - action: notify.notify
+    data:
+      message: Main entrance door controller has lost mains power
 ```
 
 Entity IDs depend on your areas and names. Check them in **Settings > Devices & services > Entities**.

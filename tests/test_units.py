@@ -240,3 +240,26 @@ def test_unknown_battery_codes_are_unknown() -> None:
     device.battery_charge, device.psu_state = 9, None
     assert sensors["battery"].value(device) is None
     assert sensors["power_supply"].value(device) is None
+
+
+@pytest.mark.parametrize(
+    ("status", "online", "name"),
+    [
+        (1, True, "online"),
+        (2, True, "online_on_battery"),  # mains failed: still connected, which matters most in a power cut
+        (3, True, "updating"),
+        (4, False, "offline"),
+        (5, True, "refreshing"),
+        (6, False, "reinstating"),
+        (7, False, "rebooting"),
+        (0, None, None),
+        (99, None, None),
+        (None, None, None),
+    ],
+)
+def test_device_status(status: int | None, online: bool | None, name: str | None) -> None:
+    from custom_components.paxton10.sensor import DEVICE_SENSORS
+
+    device = Device(1, KIND_CONTROLLER, "c", "m", None, None, None, status, None)
+    assert device.online is online
+    assert {d.key: d for d in DEVICE_SENSORS}["status"].value(device) == name

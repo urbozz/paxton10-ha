@@ -29,6 +29,17 @@
       "offline_devices": {
         "default": "mdi:lan-disconnect"
       },
+      "status": {
+        "default": "mdi:lan-check",
+        "state": {
+          "online_on_battery": "mdi:battery-alert-variant-outline",
+          "offline": "mdi:lan-disconnect",
+          "updating": "mdi:update",
+          "refreshing": "mdi:refresh",
+          "reinstating": "mdi:restore",
+          "rebooting": "mdi:restart"
+        }
+      },
       "firmware": {
         "default": "mdi:chip"
       },

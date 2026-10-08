@@ -19,6 +19,18 @@ KIND_ENTRY_PANEL = "entry_panel"
 BATTERY_CHARGE: dict[int, str] = {0: "not_connected", 1: "critical", 2: "low", 3: "good"}
 BATTERY_STATE: dict[int, str] = {1: "discharging", 2: "charging"}
 POWER_SUPPLY: dict[int, str] = {1: "failure", 2: "external"}
+# Controller and entry panel status, from the web app's DeviceStatus enum. 0 (Unknown) maps to None.
+DEVICE_STATUS: dict[int, str] = {
+    1: "online",
+    2: "online_on_battery",
+    3: "updating",
+    4: "offline",
+    5: "refreshing",
+    6: "reinstating",
+    7: "rebooting",
+}
+# Statuses where the device is up and talking to the server. A controller on battery is still online.
+CONNECTED_STATUSES = frozenset({1, 2, 3, 5})
 
 
 
@@ -72,11 +84,10 @@ class Device:
 
     @property
     def online(self) -> bool | None:
-        # Status 1 for every device while the server's summary showed 0 offline devices.
-        # Other values are assumed offline until checked against the web UI.
-        if self.status is None:
+        """Connected to the server. Online on battery, updating, and refreshing count as connected."""
+        if self.status not in DEVICE_STATUS:
             return None
-        return self.status == 1
+        return self.status in CONNECTED_STATUSES
 
 
 @dataclass

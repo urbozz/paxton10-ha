@@ -645,3 +645,30 @@ async def test_failed_name_lookup_keeps_entities_available(
     assert entry.runtime_data.last_update_success
     server.status.clear()
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_hub_allows_status_subscriptions_only() -> None:
+    from custom_components.paxton10 import hub as hub_mod
+
+    fake = FakeHub()
+    client = await connected(fake)
+    for method in (
+        hub_mod.METHOD_SUBSCRIBE_DOOR_STATE,
+        hub_mod.METHOD_UNSUBSCRIBE_DOOR_STATE,
+        hub_mod.METHOD_SUBSCRIBE_DEVICE_STATUS,
+        hub_mod.METHOD_UNSUBSCRIBE_DEVICE_STATUS,
+        hub_mod.METHOD_SUBSCRIBE_BATTERY,
+        hub_mod.METHOD_UNSUBSCRIBE_BATTERY,
+    ):
+        await client.invoke(method, [2001])
+    assert len(fake.invoked) == 6
+    # Every allowed method only subscribes or unsubscribes.
+    assert all(m.startswith(("Subscribe", "Unsubscribe")) for m in hub_mod.HUB_METHOD_ALLOWLIST)
+
+
+def test_door_state_read_is_allowed() -> None:
+    from custom_components.paxton10.api import check_allowed
+
+    check_allowed("POST", "/api/v1/Appliance/Connector/Status", allow_writes=False)
+    with pytest.raises(PaxtonBlockedRequest):
+        check_allowed("POST", "/api/v1/Appliance/Connector/Status/Set", allow_writes=False)

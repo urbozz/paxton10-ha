@@ -260,10 +260,18 @@ async def test_device_poll_and_unavailable(
     hass: HomeAssistant, server: FakeServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     entry = await setup(hass)
+    assert state(hass, "sensor", 4001, "status") == "online"
+    # On battery after a mains failure: still connected, and the status says why.
     server.controllers = [controller(4001, 2001, status=2)]
     await source(entry).poll_devices()
     await hass.async_block_till_done()
+    assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_ON
+    assert state(hass, "sensor", 4001, "status") == "online_on_battery"
+    server.controllers = [controller(4001, 2001, status=4)]
+    await source(entry).poll_devices()
+    await hass.async_block_till_done()
     assert state(hass, "binary_sensor", 4001, "connectivity") == STATE_OFF
+    assert state(hass, "sensor", 4001, "status") == "offline"
 
     # A failed poll marks everything unavailable and logs once.
     server.down.add("192.0.2.1")

@@ -26,6 +26,7 @@ from .entity import (
 from .models import (
     BATTERY_CHARGE,
     BATTERY_STATE,
+    DEVICE_STATUS,
     KIND_CONTROLLER,
     POWER_SUPPLY,
     Device,
@@ -62,6 +63,13 @@ def _mapped(codes: dict[int, str], value: int | None) -> str | None:
 # No last contact sensor: LastContact is a server-side timestamp, the same on every controller
 # to the millisecond and weeks old while they were online, so it isn't a heartbeat.
 DEVICE_SENSORS: tuple[DeviceDescription, ...] = (
+    DeviceDescription(
+        key="status",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(DEVICE_STATUS.values()),
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value=lambda d: _mapped(DEVICE_STATUS, d.status),
+    ),
     DeviceDescription(key="firmware", entity_category=EntityCategory.DIAGNOSTIC, value=lambda d: d.firmware),
     DeviceDescription(
         key="ip_address",

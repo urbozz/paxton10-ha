@@ -195,6 +195,18 @@
       "offline_devices": {
         "name": "Offline devices"
       },
+      "status": {
+        "name": "Status",
+        "state": {
+          "online": "Online",
+          "online_on_battery": "Online on battery",
+          "updating": "Updating",
+          "offline": "Offline",
+          "refreshing": "Refreshing",
+          "reinstating": "Reinstating",
+          "rebooting": "Rebooting"
+        }
+      },
       "firmware": {
         "name": "Firmware"
       },

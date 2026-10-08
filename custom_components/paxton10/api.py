@@ -36,6 +36,7 @@ READ_POSTS = (
     re.compile(r"^/token$"),
     re.compile(r"^/api/v2/Events/\?page=\d+(&pageSize=\d+)?$"),
     re.compile(r"^/api/v1/Events/Type/CountByDay$"),
+    re.compile(r"^/api/v1/Appliance/Connector/Status$"),  # door state for a list of door ids
 )
 # POSTs that change something. Each one is deliberate.
 WRITE_ALLOWLIST = (
