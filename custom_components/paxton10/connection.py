@@ -156,6 +156,25 @@ class PaxtonConnection:
 
         return client.transport.base_url, token
 
+    async def remote_hub(self) -> tuple[RemoteTransport, Callable[[], str | None]] | None:
+        """The relay transport and a token getter for live pushes on Remote, or None off Remote.
+
+        Signs in first if needed. Pushes ride the REST socket, so a reconnect of the client means
+        a new transport: the old one closes, and the live feed subscribes again on the new one.
+        """
+        async with self._lock:
+            if self._client is None:
+                await self._connect_locked()
+            client = self._client
+        assert client
+        if self.active_route != ROUTE_REMOTE or not isinstance(client.transport, RemoteTransport):
+            return None
+
+        def token() -> str | None:
+            return self._client.token if self._client else None
+
+        return client.transport, token
+
     async def renew(self) -> None:
         """Drop the client, so the next call signs in again. For a token the hub rejected."""
         async with self._lock:

@@ -17,6 +17,7 @@ from .models import (
     Site,
     name_hardware,
     parse_devices,
+    parse_door_states,
     parse_server,
     parse_summary,
 )
@@ -29,6 +30,7 @@ PATH_PARAMETERS = "/api/v2/System/Parameters/All"
 PATH_SUMMARY = "/api/v1/System/Summary"
 PATH_CONTROLLERS = "/api/v1/Devices/1/false?page=0&pageSize=100"
 PATH_ENTRY_PANELS = "/api/v1/Devices/3/false?page=0&pageSize=100"
+PATH_DOOR_STATES = "/api/v1/Appliance/Connector/Status"  # POST, body: the door ids
 MAX_GROUPS = 200  # stop a malformed tree from looping
 
 
@@ -110,6 +112,13 @@ async def read_summary(conn: PaxtonConnection) -> dict[str, int]:
     return parse_summary(await conn.get(PATH_SUMMARY))
 
 
+async def read_door_states(conn: PaxtonConnection, door_ids: list[int]) -> dict[int, int]:
+    """Every door's state in one read, as the web app loads it before subscribing to changes."""
+    if not door_ids:
+        return {}
+    return parse_door_states(await conn.post(PATH_DOOR_STATES, door_ids))
+
+
 async def discover_site(conn: PaxtonConnection) -> Site:
     """Full read of the site. Optional reads the account can't make are skipped, not fatal."""
     site = Site(server=await read_server(conn), doors=await read_doors(conn))
@@ -124,4 +133,9 @@ async def discover_site(conn: PaxtonConnection) -> Site:
     except PaxtonForbidden:
         site.can_read_summary = False
         _LOGGER.info("This Paxton account can't read the system summary")
+    try:
+        site.door_states = await read_door_states(conn, sorted(site.doors))
+    except (PaxtonForbidden, PaxtonNotFound):
+        site.can_read_door_states = False
+        _LOGGER.info("This Paxton server or account can't read door state; no door lock entities")
     return site

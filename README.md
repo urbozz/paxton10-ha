@@ -66,8 +66,8 @@ Open the integration and click **Configure**.
 | Option | Default | Description |
 |---|---|---|
 | Allow door control | Off | Adds an **Open** button for each door and the gate. When off, Home Assistant creates no buttons and the client refuses every write. |
-| Device status interval | 30 s | How often to read controllers, entry panels, and the system summary. Minimum 10 s. |
-| Event interval | 10 s | How often to read the event log on Remote, or on Direct while the live feed is down. Minimum 5 s. |
+| Device status interval | 30 s | How often to read controllers, entry panels, the system summary, and door lock state. Minimum 10 s. |
+| Event interval | 10 s | How often to read the event log while the live feed is down. Minimum 5 s. |
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
 | Include user names in events | Off | Adds the user's name to door events. User names are personal data. |
@@ -95,6 +95,7 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 | Server | Total devices, Software version | Diagnostic. |
 | Door | Open (button) | Only when **Allow door control** is on. The door opens for its configured open time, then relocks. There's no lock command. |
 | Door | Event (event) | Named after the door, for example `event.main_entrance_door`. See [Events](#events). |
+| Door | Lock (binary sensor) | On while the door is unlocked: for its open time after a fob, exit button, or **Open** press, or while held open. Off while locked. The `door_state` attribute gives Paxton's state: `locked`, `unlocked`, `forced_or_left_open`, `offline`, or `online`. Unavailable while Paxton reports the door offline. Created only if the server and account can read door state. |
 | Controller and entry panel | Connectivity (binary sensor) | Diagnostic. On while the device is connected to the server, including while it runs on battery, updates its firmware, or refreshes. Off while it's offline, rebooting, or reinstating. |
 | Controller and entry panel | Status | Diagnostic. `online`, `online_on_battery`, `updating`, `offline`, `refreshing`, `reinstating`, or `rebooting`, as the web app shows them. `online_on_battery` means the controller has lost mains power. |
 | Controller and entry panel | Firmware | Diagnostic. |
@@ -152,8 +153,9 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 
 ## How data updates
 
-- **Events on Direct:** live. The integration subscribes to the server's live event feed, the same one the Paxton10 web app uses, and fires each event as it arrives, usually within a second. The feed doesn't carry user names, so with **Include user names in events** on, an event about a user first waits for one event log read to get the name. If that read fails, the event still fires, without the name. Every 5 minutes the integration also reads the event log, in case the feed missed one.
-- **Events on Remote, or while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
+- **Events:** live, on Direct and Remote. The integration subscribes to the server's live event feed, the same one the Paxton10 web app uses, and fires each event as it arrives. On Direct that's usually within a second. Fob and card events carry the user's name. Software opens don't, so with **Include user names in events** on, those first wait for one event log read to get the name; if that read fails, the event still fires, without the name. Every 5 minutes the integration also reads the event log, in case the feed missed one.
+- **Events while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
+- **Door lock state:** live on the same feed, and also read with every device status poll. A poll never overwrites a newer live update.
 - **Device status and summary:** every device status interval.
 - **Layout:** every hour, the integration reads the device tree again. It adds new doors and devices, and removes devices that are no longer on the server.
 
@@ -161,7 +163,7 @@ If the device read or an event log read fails, every entity becomes unavailable 
 
 An event never fires twice, even when it arrives both live and from the event log. A live feed failure on its own doesn't make entities unavailable, because the event log covers the gap. Home Assistant logs at info level when the live feed connects and when it falls back to polling. Diagnostics show which is in use as `event_source`: `live` or `polling`.
 
-The live feed is an ASP.NET SignalR 2 long poll at `/signalr` on the server, so it only works on Direct. Paxton's remote access service relays it differently, and the integration doesn't use that yet.
+On Direct, the live feed is an ASP.NET SignalR 2 long poll at `/signalr` on the server. On Remote, the same events and door states arrive through Paxton's remote access relay, on the connection the integration already uses for everything else, so Remote needs no extra network access.
 
 ## Examples
 
@@ -227,7 +229,8 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 ## Known limitations
 
 - The API is undocumented and can change with any Paxton upgrade.
-- On Remote, and on Direct while the live feed is down, events are polled. A door event can then take up to the event interval to appear.
+- While the live feed is down, events are polled. A door event can then take up to the event interval to appear.
+- The Lock sensor shows the lock state, not whether the door is physically open. Paxton only reports forced or left open with a door contact fitted, and the integration then shows it as unlocked, with `door_state` set to `forced_or_left_open`.
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
 - Device status and the summary are always polled.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.

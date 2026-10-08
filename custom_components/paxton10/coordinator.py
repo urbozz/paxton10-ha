@@ -224,12 +224,14 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             site = replace(site, devices=update.devices)
         if update.summary is not None:
             site = replace(site, summary=update.summary)
+        if update.door_states is not None:
+            site = replace(site, door_states={**site.door_states, **update.door_states})
         for event in update.events:
             self._fire(event)
         self._update_fallback_issue()
         recovered = update.kind in self._failing
         self._failing.discard(update.kind)
-        if recovered or update.devices is not None or update.summary is not None:
+        if recovered or update.devices is not None or update.summary is not None or update.door_states is not None:
             self._publish(site)
 
     @callback

@@ -113,7 +113,7 @@ async def test_no_buttons_and_no_writes_by_default(hass: HomeAssistant, server: 
     assert entity_id(hass, "button", 2001, "open") is None
     assert hass.states.async_entity_ids("button") == []
     # Only reads and the two read-only POSTs were sent.
-    assert {c[2] for c in server.calls if c[1] == "POST"} <= {"/token", EVENTS}
+    assert {c[2] for c in server.calls if c[1] == "POST"} <= {"/token", EVENTS, "/api/v1/Appliance/Connector/Status"}
 
     # Even if something calls the client directly, it refuses the write.
     with pytest.raises(Exception, match="not on the allowlist"):

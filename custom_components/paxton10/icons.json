@@ -69,6 +69,15 @@
           "external": "mdi:power-plug"
         }
       }
+    },
+    "binary_sensor": {
+      "lock": {
+        "default": "mdi:lock",
+        "state": {
+          "on": "mdi:lock-open-variant",
+          "off": "mdi:lock"
+        }
+      }
     }
   }
 }

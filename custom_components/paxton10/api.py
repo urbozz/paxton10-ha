@@ -3,7 +3,8 @@
 DirectTransport: HTTPS to the Paxton10 server on the site network (self-signed certificate).
 RemoteTransport: Paxton's remote access service (p10remote.com). The web UI tunnels every API
 call over an Azure SignalR hub as a "UiApiRequest" message, and replies arrive as
-"CloudApiResponse" messages matched by messageId.
+"CloudApiResponse" messages matched by messageId. Live hub calls share the same socket: the web
+UI wraps them as "UiSignalrMessage", and pushes arrive as "ServerSignalrMessage".
 
 No Home Assistant imports, so tools can use this module directly.
 
@@ -29,6 +30,9 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 RECORD_SEPARATOR = "\x1e"
+TARGET_HUB_CALL = "UiSignalrMessage"
+TARGET_HUB_PUSH = "ServerSignalrMessage"
+HUB_CALL_PREFIXES = ("Subscribe", "Unsubscribe")  # hub.HUB_METHOD_ALLOWLIST is the full list
 NEGOTIATE_URL = "https://negotiate.p10remote.com/api/negotiateclient?remoteId={remote_id}"
 
 # POSTs that only read (query endpoints).
@@ -131,7 +135,7 @@ class DirectTransport:
 
 
 class RemoteTransport:
-    """Paxton remote access: SignalR hub at hub.p10remote.com, routed to the site by remote ID."""
+    """Paxton remote access: the ASP.NET Core SignalR hub the negotiate service names, routed by remote ID."""
 
     name = "remote"
 
@@ -143,6 +147,50 @@ class RemoteTransport:
         self._pending: dict[str, asyncio.Future[Response]] = {}
         self._invocation = 0
         self._open = False
+        self._hub_calls: dict[str, asyncio.Future[Any]] = {}
+        self._pushes: asyncio.Queue[tuple[str, list[Any]] | None] | None = None
+
+    @property
+    def is_open(self) -> bool:
+        return bool(self._open and self._ws and not self._ws.closed)
+
+    def listen(self) -> asyncio.Queue[tuple[str, list[Any]] | None]:
+        """Start queueing live pushes as (method, parameters). None in the queue means the socket closed."""
+        queue: asyncio.Queue[tuple[str, list[Any]] | None] = asyncio.Queue()
+        if not self.is_open:
+            queue.put_nowait(None)
+        else:
+            self._pushes = queue
+        return queue
+
+    def stop_listening(self, queue: asyncio.Queue[tuple[str, list[Any]] | None]) -> None:
+        if self._pushes is queue:
+            self._pushes = None
+
+    async def hub_invoke(self, method: str, parameters: list[Any], token: str | None) -> Any:
+        """Call a live hub method through the relay, as the web UI's HubRemote does, and wait for it to finish.
+
+        bearerToken is the raw access token (the web UI's tokenStorage.token), unlike the
+        "Bearer ..." string that UiApiRequest carries. Only subscribe and unsubscribe calls are sent.
+        """
+        if not method.startswith(HUB_CALL_PREFIXES):
+            raise PaxtonBlockedRequest(f"hub method {method} is not a subscription")
+        if not self.is_open:
+            raise PaxtonError("remote connection is not open")
+        assert self._ws
+        self._invocation += 1
+        invocation = str(self._invocation)
+        call = {"methodName": method, "parameters": parameters, "bearerToken": token or "", "remoteId": self._remote_id}
+        fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        self._hub_calls[invocation] = fut
+        envelope = {"arguments": [json.dumps(call)], "invocationId": invocation, "target": TARGET_HUB_CALL, "type": 1}
+        await self._ws.send_str(json.dumps(envelope) + RECORD_SEPARATOR)
+        try:
+            return await asyncio.wait_for(fut, timeout=20)
+        except asyncio.TimeoutError as err:
+            raise PaxtonError(f"hub {method}: no reply from the relay within 20 s") from err
+        finally:
+            self._hub_calls.pop(invocation, None)
 
     async def start(self) -> None:
         """Connect to the relay. Every failure is a PaxtonError, as on the Direct transport."""
@@ -197,10 +245,15 @@ class RemoteTransport:
 
     def _fail_pending(self) -> None:
         self._open = False  # send() refuses until start() runs again
-        for fut in self._pending.values():
+        for fut in [*self._pending.values(), *self._hub_calls.values()]:
             if not fut.done():
                 fut.set_exception(PaxtonError("remote connection closed"))
         self._pending.clear()
+        self._hub_calls.clear()
+        if self._pushes is not None:
+            # Tell the live feed, so it reconnects and subscribes again.
+            self._pushes.put_nowait(None)
+            self._pushes = None
 
     async def _read(self) -> None:
         assert self._ws
@@ -238,8 +291,34 @@ class RemoteTransport:
                     fut = self._pending.pop(message_id, None)
                     if fut and not fut.done():
                         fut.set_result(Response(int(reply.get("statusCode") or 0), _parse(reply.get("payload"))))
+                elif data.get("type") == 1 and data.get("target") == TARGET_HUB_PUSH:
+                    self._push(data)
+                elif data.get("type") == 3:  # completion of an invocation
+                    self._complete(data)
                 elif data.get("type") == 7:  # server closing
                     return
+
+    def _push(self, data: dict[str, Any]) -> None:
+        """Queue a live push. A malformed one is dropped: it must never take down the REST socket."""
+        try:
+            push = json.loads(data["arguments"][0])
+            method, parameters = push["methodName"], push.get("parameters") or []
+            if not isinstance(method, str) or not isinstance(parameters, list):
+                raise TypeError("unexpected types")
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+            _LOGGER.debug("Ignoring a malformed ServerSignalrMessage")
+            return
+        if self._pushes is not None:
+            self._pushes.put_nowait((method, parameters))
+
+    def _complete(self, data: dict[str, Any]) -> None:
+        fut = self._hub_calls.get(str(data.get("invocationId")))
+        if fut is None or fut.done():
+            return  # a UiApiRequest's completion: its reply came as CloudApiResponse
+        if data.get("error"):
+            fut.set_exception(PaxtonError(f"hub call failed: {str(data['error'])[:200]}"))
+        else:
+            fut.set_result(data.get("result"))
 
     async def send(self, method: str, path: str, token: str | None, body: str | None, content_type: str) -> Response:
         if not self._ws or self._ws.closed or not self._open:

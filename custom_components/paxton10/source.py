@@ -18,10 +18,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .api import PaxtonAuthError, PaxtonError
-from .connection import PaxtonConnection, PaxtonForbidden
+from .connection import PaxtonConnection, PaxtonForbidden, PaxtonNotFound
 from .const import EVENT_PAGE_SIZE
-from .discovery import read_devices, read_summary
-from .hub import METHOD_SUBSCRIBE_EVENTS, HubUnauthorized, LongPollHub, event_rows
+from .discovery import read_devices, read_door_states, read_summary
+from .hub import (
+    METHOD_SUBSCRIBE_DOOR_STATE,
+    METHOD_SUBSCRIBE_EVENTS,
+    HubDisconnected,
+    HubUnauthorized,
+    LiveFeed,
+    LongPollHub,
+    RemoteFeed,
+    door_state_rows,
+    event_rows,
+)
 from .models import (
     Device,
     DoorEvent,
@@ -29,6 +39,7 @@ from .models import (
     event_filter,
     live_event_filter,
     name_hardware,
+    parse_door_states,
     parse_event,
 )
 
@@ -38,7 +49,7 @@ MAX_BACKOFF = 300
 SEEN_EVENT_IDS = 1000  # well over one page, so an event never comes back as new
 EVENTS_PATH = f"/api/v2/Events/?page=0&pageSize={EVENT_PAGE_SIZE}"
 RECONCILE_INTERVAL = 300  # while live, also read the event log this often, in case a push was lost
-NOT_DIRECT_RECHECK = 300  # while not on Direct, poll for this long before checking the route again
+NOT_DIRECT_RECHECK = 300  # with no live feed on the active route, poll this long before checking again
 _sleep = asyncio.sleep  # tests replace this, not asyncio.sleep itself
 _monotonic = time.monotonic  # and this
 
@@ -49,6 +60,7 @@ NO_TIME = datetime(2000, 1, 1, tzinfo=timezone.utc)  # sorts events without a ti
 
 KIND_DEVICES = "devices"
 KIND_EVENTS = "events"
+KIND_DOOR_STATES = "door_states"  # live door state pushes; polled door state comes with KIND_DEVICES
 
 
 @dataclass
@@ -61,6 +73,7 @@ class SourceUpdate:
     kind: str
     devices: dict[int, Device] | None = None
     summary: dict[str, int] | None = None
+    door_states: dict[int, int] | None = None  # changed doors only; merged into the site's door states
     events: list[DoorEvent] = field(default_factory=list)
     error: PaxtonError | None = None
 
@@ -104,6 +117,7 @@ class PollingSource(UpdateSource):
         self._baselined = False
         self.auth_failed = False
         self.mode = MODE_POLLING  # how events arrive, for diagnostics
+        self._door_pushed_at: dict[int, float] = {}  # door id -> when its last live state arrived
 
     def set_site(self, site: Site) -> None:
         """Use a rediscovered layout from the next poll on."""
@@ -119,7 +133,7 @@ class PollingSource(UpdateSource):
         except PaxtonError as err:
             _LOGGER.debug("First event poll failed, the event loop will retry: %s", err)
         loop = asyncio.get_running_loop()
-        if self._site.can_read_devices or self._site.can_read_summary:
+        if self._site.can_read_devices or self._site.can_read_summary or self._site.can_read_door_states:
             self._tasks.append(
                 loop.create_task(
                     self._run(self.poll_devices, self._device_interval, KIND_DEVICES), name="paxton10 devices"
@@ -183,6 +197,17 @@ class PollingSource(UpdateSource):
                 update.summary = await read_summary(self._conn)
             except PaxtonForbidden:
                 self._site.can_read_summary = False
+        if self._site.can_read_door_states:
+            started = _monotonic()
+            try:
+                states = await read_door_states(self._conn, sorted(self._site.doors))
+            except (PaxtonForbidden, PaxtonNotFound):
+                self._site.can_read_door_states = False
+            else:
+                # A push that arrived while this read was in flight is newer: keep it.
+                update.door_states = {
+                    door: state for door, state in states.items() if self._door_pushed_at.get(door, -1.0) < started
+                }
         if self._callback:
             await self._callback(update)
 
@@ -270,19 +295,20 @@ class LiveSource(PollingSource):
     async def _hub_cycle(self, failures: int) -> int:
         """Connect, subscribe, and listen until the hub fails. Returns the new failure count.
 
-        Off Direct there's no hub: poll until it's time to check the route again.
+        Direct uses the server's long poll, Remote the relay socket. With neither (a transport
+        without a hub), poll until it's time to check the route again.
         Raises PaxtonAuthError for a rejected password.
         """
-        hub: LongPollHub | None = None
+        hub: LiveFeed | None = None
         try:
-            target = await self._conn.hub_target()
-            if target is None:
-                self._set_mode(MODE_POLLING, "the active route isn't Direct")
+            hub = await self._open_feed()
+            if hub is None:
+                self._set_mode(MODE_POLLING, "the active route has no live feed")
                 await self._poll_for(NOT_DIRECT_RECHECK)
                 return 0
-            hub = LongPollHub(self._conn.session, *target)
             await hub.connect()
             await hub.invoke(METHOD_SUBSCRIBE_EVENTS, live_event_filter(self._site.server.utc_offset_minutes))
+            await self._subscribe_door_states(hub)
             # Catch up on anything logged before the subscription took effect.
             await self._poll_once()
             self._set_mode(MODE_LIVE)
@@ -305,11 +331,35 @@ class LiveSource(PollingSource):
         self._set_mode(MODE_POLLING, "reconnecting")
         return failures + 1
 
-    async def _listen(self, hub: LongPollHub) -> None:
+    async def _open_feed(self) -> LiveFeed | None:
+        if (target := await self._conn.hub_target()) is not None:
+            return LongPollHub(self._conn.session, *target)
+        if (remote := await self._conn.remote_hub()) is not None:
+            return RemoteFeed(*remote)
+        return None
+
+    async def _subscribe_door_states(self, hub: LiveFeed) -> None:
+        """Door state pushes are a bonus: if the server refuses them, the device poll still reads door state."""
+        if not self._site.can_read_door_states or not self._site.doors:
+            return
+        try:
+            await hub.invoke(METHOD_SUBSCRIBE_DOOR_STATE, sorted(self._site.doors))
+        except HubDisconnected:
+            raise
+        except PaxtonError as err:
+            _LOGGER.debug("Paxton10 live door state unavailable, door state is polled instead: %s", err)
+
+    async def _listen(self, hub: LiveFeed) -> None:
         """Hold the long poll and deliver pushes until the hub fails."""
         last_reconcile = _monotonic()
         while True:
             messages = await hub.poll()
+            states = [row for message in messages for row in door_state_rows(message)]
+            if states and (door_states := parse_door_states(states)):
+                now = _monotonic()
+                self._door_pushed_at.update(dict.fromkeys(door_states, now))
+                if self._callback:
+                    await self._callback(SourceUpdate(KIND_DOOR_STATES, door_states=door_states))
             rows = [row for message in messages for row in event_rows(message)]
             if rows:
                 events = self._parse_newest_first(rows)

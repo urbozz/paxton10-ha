@@ -31,6 +31,20 @@ DEVICE_STATUS: dict[int, str] = {
 }
 # Statuses where the device is up and talking to the server. A controller on battery is still online.
 CONNECTED_STATUSES = frozenset({1, 2, 3, 5})
+# Door state, from the web app's ApplianceState enum (the door values of it). Live at 4.11: a door reads
+# "2" while locked, "1" for its open time after a release, then "2" again.
+DOOR_UNLOCKED = 1
+DOOR_LOCKED = 2
+DOOR_FORCED_OR_LEFT_OPEN = 3
+DOOR_OFFLINE = 4
+DOOR_ONLINE = 5
+DOOR_STATES: dict[int, str] = {
+    DOOR_UNLOCKED: "unlocked",
+    DOOR_LOCKED: "locked",
+    DOOR_FORCED_OR_LEFT_OPEN: "forced_or_left_open",
+    DOOR_OFFLINE: "offline",
+    DOOR_ONLINE: "online",
+}
 
 
 
@@ -109,9 +123,11 @@ class Site:
     doors: dict[int, Door] = field(default_factory=dict)
     devices: dict[int, Device] = field(default_factory=dict)
     summary: dict[str, int] = field(default_factory=dict)
+    door_states: dict[int, int] = field(default_factory=dict)  # door id -> DOOR_STATES code
     # Which optional reads the account is allowed to make.
     can_read_devices: bool = True
     can_read_summary: bool = True
+    can_read_door_states: bool = True
 
 
 @dataclass(frozen=True)
@@ -212,6 +228,19 @@ def parse_devices(body: Any, kind: str) -> dict[int, Device]:
             psu_state=psu.get("PowerState") if kind == KIND_CONTROLLER else None,
             door_ids=_mapped_doors(raw),
         )
+    return out
+
+
+def parse_door_states(body: Any) -> dict[int, int]:
+    """Rows from Appliance/Connector/Status or applianceStateNotification: EntityId and StateValue ("2")."""
+    out: dict[int, int] = {}
+    for row in body if isinstance(body, list) else []:
+        if not isinstance(row, dict) or not isinstance(entity_id := row.get("EntityId"), int):
+            continue
+        try:
+            out[entity_id] = int(row.get("StateValue"))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
     return out
 
 

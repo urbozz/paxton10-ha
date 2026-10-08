@@ -19,6 +19,10 @@ names, state and status codes, and EventTime (to measure delay). Numbers are kep
 Usage, from the repository root (needs only aiohttp):
     python3 tools/live_capture.py --direct 192.0.2.10
     python3 tools/live_capture.py --direct 192.0.2.10 --seconds 180
+    python3 tools/live_capture.py --remote abc123
+
+On Remote, the hub calls and pushes ride the relay websocket (UiSignalrMessage out,
+ServerSignalrMessage in), as the integration's RemoteFeed sends and reads them.
 Add --clipboard to read the password from the macOS clipboard.
 """
 
@@ -46,7 +50,7 @@ sys.modules["paxton10"] = _pkg
 
 from paxton10.api import PaxtonAuthError, PaxtonError, password_hash
 from paxton10.connection import PaxtonConnection
-from paxton10.const import ROUTE_DIRECT
+from paxton10.const import ROUTE_DIRECT, ROUTE_REMOTE
 from paxton10.discovery import discover_site
 from paxton10.hub import (
     METHOD_SUBSCRIBE_BATTERY,
@@ -58,7 +62,9 @@ from paxton10.hub import (
     METHOD_UNSUBSCRIBE_DOOR_STATE,
     METHOD_UNSUBSCRIBE_EVENTS,
     NOTIFY_DOOR_STATE,
+    HubMessage,
     LongPollHub,
+    RemoteFeed,
     event_rows,
 )
 from paxton10.models import KIND_CONTROLLER, live_event_filter, parse_event, parse_time
@@ -98,6 +104,37 @@ class RecordingHub(LongPollHub):
         self.log.append(entry)
         print(f"{entry['at']}  {entry['request']:<26} {entry['ms']:>6} ms  {json.dumps(entry['reply'])[:300]}")
         return reply
+
+
+class RecordingRemoteFeed(RemoteFeed):
+    """The integration's Remote feed, recording each hub call and push."""
+
+    def __init__(self, *args: Any, log: list[dict[str, Any]], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.log = log
+
+    async def invoke(self, method: str, *args: Any) -> Any:
+        started = time.monotonic()
+        try:
+            result = await super().invoke(method, *args)
+        except PaxtonError as err:
+            self.log.append({"request": f"UiSignalrMessage {method}", "error": str(err)})
+            print(f"UiSignalrMessage {method}: failed: {err}")
+            raise
+        entry = {"request": f"UiSignalrMessage {method}", "ms": round((time.monotonic() - started) * 1000), "reply": shape(result)}
+        self.log.append(entry)
+        print(f"UiSignalrMessage {method:<40} {entry['ms']:>6} ms  {json.dumps(entry['reply'])[:200]}")
+        return result
+
+    async def poll(self) -> list[HubMessage]:
+        messages = await super().poll()
+        for message in messages:
+            self.log.append({
+                "at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                "request": "ServerSignalrMessage",
+                "reply": {"M": [{"H": message.hub, "M": message.method, "A": shape(message.args)}]},
+            })
+        return messages
 
 
 def read_password(from_clipboard: bool) -> str:
@@ -140,11 +177,13 @@ async def capture(
     args: argparse.Namespace, username: str, password: str, log: list[dict[str, Any]], events: list[dict[str, Any]]
 ) -> int:
     async with aiohttp.ClientSession() as session:
-        conn = PaxtonConnection(session, ROUTE_DIRECT, args.direct, username, password_hash(password))
+        route, target_name = (ROUTE_DIRECT, args.direct) if args.direct else (ROUTE_REMOTE, args.remote)
+        conn = PaxtonConnection(session, route, target_name, username, password_hash(password))
         del password
         try:
             site = await discover_site(conn)
-            target = await conn.hub_target()
+            target = await conn.hub_target() if args.direct else None
+            remote = await conn.remote_hub() if args.remote else None
         except PaxtonAuthError as err:
             print(f"Sign-in failed: {err}")
             await conn.close()
@@ -153,7 +192,7 @@ async def capture(
             print(f"Connection failed: {err}")
             await conn.close()
             return 1
-        assert target
+        assert target or remote
         offset = site.server.utc_offset_minutes
         door_ids = sorted(site.doors)
         device_ids = sorted(site.devices)
@@ -175,7 +214,10 @@ async def capture(
 
         await read_door_state("before")
 
-        hub = RecordingHub(session, *target, log=log)
+        hub: LongPollHub | RemoteFeed = (
+            RecordingHub(session, *target, log=log) if target else RecordingRemoteFeed(*remote, log=log)  # type: ignore[misc]
+        )
+        print(f"Live feed: {'server long poll' if target else 'remote relay socket'}.")
         subscribed: list[str] = []
         try:
             await hub.connect()
@@ -274,7 +316,9 @@ def write_report(path: str | None, log: list[dict[str, Any]], events: list[dict[
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--direct", metavar="HOST", required=True, help="server address on the site network")
+    route = parser.add_mutually_exclusive_group(required=True)
+    route.add_argument("--direct", metavar="HOST", help="server address on the site network")
+    route.add_argument("--remote", metavar="REMOTE_ID", help="remote ID from the paxton10remote.com address")
     parser.add_argument("--seconds", type=int, default=180, help="how long to listen (default 180)")
     parser.add_argument("--clipboard", action="store_true", help="read the password from the macOS clipboard")
     parser.add_argument("--out", help="report path (default probe-live-direct.json)")

@@ -114,6 +114,7 @@ class FakeWS:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._handshake = handshake
         self._reply = reply
+        self.hub_error: str | None = None  # the relay's answer to a UiSignalrMessage call
 
     def _msg(self, data: str, kind: aiohttp.WSMsgType = aiohttp.WSMsgType.TEXT) -> Any:
         return MagicMock(type=kind, data=data)
@@ -124,6 +125,11 @@ class FakeWS:
     async def send_str(self, data: str) -> None:
         frame = json.loads(data.rstrip(RECORD_SEPARATOR))
         self.sent.append(frame)
+        if frame.get("target") == "UiSignalrMessage" and self._reply:
+            done = {"type": 3, "invocationId": frame["invocationId"]}
+            done.update({"error": self.hub_error} if self.hub_error else {"result": None})
+            await self._queue.put(self._msg(json.dumps(done) + RECORD_SEPARATOR))
+            return
         if frame.get("target") != "UiApiRequest" or not self._reply:
             return
         inner = json.loads(frame["arguments"][0])

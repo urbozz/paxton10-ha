@@ -61,6 +61,7 @@ class FakeHub:
         self.pushes: asyncio.Queue[Any] = asyncio.Queue()
         self.once: dict[str, Any] = {}  # path -> reply, status, or exception for the next request only
         self.send_error: str | None = None
+        self.refuse: set[str] = set()  # hub methods that answer with an error
         self.message = 0
 
     def request(self, method: str, url: str, *, params: dict[str, str], data: str | None, **_: Any) -> Any:
@@ -97,7 +98,8 @@ class FakeHub:
         elif path == "send":
             body = json.loads(parse_qs(data or "")["data"][0])
             self.invoked.append((body["M"], body["A"]))
-            reply = {"I": body["I"], "E": self.send_error} if self.send_error else {"I": body["I"]}
+            error = self.send_error or ("refused" if body["M"] in self.refuse else None)
+            reply = {"I": body["I"], "E": error} if error else {"I": body["I"]}
         elif path == "poll":
             item = await self.pushes.get()
             if isinstance(item, BaseException):
@@ -169,7 +171,10 @@ async def test_live_events(hass: HomeAssistant, server: FakeServer, hub: FakeHub
     src = live(entry)
     await until(lambda: src.mode == MODE_LIVE)
     # The hub gets the web UI's live filter, and the token on the query string.
-    assert hub.invoked == [(METHOD_SUBSCRIBE_EVENTS, [live_event_filter(src._site.server.utc_offset_minutes)])]
+    assert hub.invoked == [
+        (METHOD_SUBSCRIBE_EVENTS, [live_event_filter(src._site.server.utc_offset_minutes)]),
+        ("SubscribeToApplianceStateNotifications", [[2001, 2002]]),
+    ]
     negotiate = hub.calls[0][1]
     assert negotiate["bearer_token"] == "tok" and negotiate["connectionData"] == '[{"name":"system"}]'
     rest_polls = len(server.sent("POST", EVENTS))
@@ -717,3 +722,158 @@ async def test_stop_event_stops_updates_cleanly(
     assert "Unexpected error" not in caplog.text
     # A later unload still works.
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+
+# Door lock state: polled with the devices, live on the hub.
+
+
+def door_push(door: int, value: str) -> dict[str, Any]:
+    return {"C": "cx", "M": [{"H": "System", "M": "applianceStateNotification", "A": [[
+        {"StateValue": value, "Metric": 0, "EntityId": door, "Subnet": None}
+    ]]}]}
+
+
+async def test_door_lock_live(hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]) -> None:
+    from homeassistant.const import (
+        STATE_OFF,
+        STATE_ON,
+        STATE_UNAVAILABLE,
+        STATE_UNKNOWN,
+    )
+
+    entry = await setup(hass)
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    lock = "binary_sensor.main_entrance_door_lock"
+    st = hass.states.get(lock)
+    assert st and st.state == STATE_OFF and st.attributes["door_state"] == "locked"
+    assert st.attributes["device_class"] == "lock"
+    st = hass.states.get("binary_sensor.vehicle_gate_lock")
+    assert st and st.state == STATE_ON
+
+    for value, state, door_state in (
+        ("1", STATE_ON, "unlocked"),
+        ("3", STATE_ON, "forced_or_left_open"),
+        ("5", STATE_UNKNOWN, "online"),
+        ("9", STATE_UNKNOWN, "unknown"),
+        ("4", STATE_UNAVAILABLE, None),
+        ("2", STATE_OFF, "locked"),
+    ):
+        server.door_states[2001] = value  # the server reports what it pushed
+        hub.pushes.put_nowait(door_push(2001, value))
+        await until(
+            lambda: (s := hass.states.get(lock)) is not None
+            and s.state == state  # noqa: B023
+            and (door_state is None or s.attributes.get("door_state") == door_state),  # noqa: B023
+            hass,
+        )
+    # A push for one door leaves the others alone.
+    assert hass.states.get("binary_sensor.vehicle_gate_lock").state == STATE_ON  # type: ignore[union-attr]
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert diag["door_states"] == {2001: 2, 2002: 1} and diag["can_read_door_states"]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_door_lock_polled_and_refused_push(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
+) -> None:
+    from homeassistant.const import STATE_ON
+
+    hub.refuse.add("SubscribeToApplianceStateNotifications")
+    entry = await setup(hass)
+    src = live(entry)
+    # The server refused live door state, but events are still live.
+    await until(lambda: src.mode == MODE_LIVE)
+    server.door_states[2001] = "1"
+    await src.poll_devices()
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.main_entrance_door_lock").state == STATE_ON  # type: ignore[union-attr]
+    # A server without the read stops being asked.
+    server.status["/api/v1/Appliance/Connector/Status"] = 404
+    await src.poll_devices()
+    assert not src._site.can_read_door_states
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize("status", [403, 404])
+async def test_no_door_lock_without_the_read(hass: HomeAssistant, server: FakeServer, status: int) -> None:
+    server.status["/api/v1/Appliance/Connector/Status"] = status
+    entry = await setup(hass)
+    assert hass.states.get("binary_sensor.main_entrance_door_lock") is None
+    assert not entry.runtime_data.data.can_read_door_states
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+def test_door_state_parsing() -> None:
+    from custom_components.paxton10.hub import door_state_rows
+    from custom_components.paxton10.models import parse_door_states
+
+    rows = [{"EntityId": 1, "StateValue": "2"}, {"EntityId": 2, "StateValue": 1}, {"EntityId": 3, "StateValue": "x"},
+            {"EntityId": "4", "StateValue": "1"}, {"EntityId": 5}, "junk"]
+    assert parse_door_states(rows) == {1: 2, 2: 1}
+    assert parse_door_states({"not": "a list"}) == {}
+    assert door_state_rows(HubMessage("System", "applianceStateNotification", [rows])) == rows[:5]
+    assert door_state_rows(HubMessage("System", "applianceStateNotification", [{"EntityId": 1}])) == [{"EntityId": 1}]
+    assert door_state_rows(HubMessage("System", "newLiveEventNotification", [rows])) == []
+    assert door_state_rows(HubMessage("System", "applianceStateNotification", [])) == []
+
+
+async def test_polled_door_state_never_overrides_a_newer_push(
+    hass: HomeAssistant, server: FakeServer, fast_sleep: list[float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = {"now": 100.0}
+    monkeypatch.setattr(source_mod, "_monotonic", lambda: clock["now"])
+    entry = await setup(hass)
+    src = live(entry)
+    await src.async_stop()
+    received: list[Any] = []
+
+    async def cb(update: Any) -> None:
+        received.append(update)
+
+    src._callback = cb
+    real_read = source_mod.read_door_states
+
+    async def slow_read(conn: Any, door_ids: list[int]) -> dict[int, int]:
+        # A push for door 2001 lands while this read is in flight.
+        clock["now"] = 105.0
+        src._door_pushed_at[2001] = 105.0
+        return await real_read(conn, door_ids)
+
+    monkeypatch.setattr(source_mod, "read_door_states", slow_read)
+    await src.poll_devices()
+    assert received[-1].door_states == {2002: 1}  # 2001's polled state is older than its push
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_door_state_edges(hass: HomeAssistant, server: FakeServer, fast_sleep: list[float]) -> None:
+    from custom_components.paxton10.discovery import read_door_states
+
+    entry = await setup(hass)
+    src = live(entry)
+    await src.async_stop()
+    calls = len(server.calls)
+    assert await read_door_states(src._conn, []) == {}
+    assert len(server.calls) == calls  # no doors, no read
+
+    class Hub:
+        def __init__(self, error: Exception | None = None) -> None:
+            self.calls: list[str] = []
+            self.error = error
+
+        async def invoke(self, method: str, *args: Any) -> None:
+            self.calls.append(method)
+            if self.error:
+                raise self.error
+
+    # Without the read there's nothing to subscribe to.
+    src._site.can_read_door_states = False
+    skipped = Hub()
+    await src._subscribe_door_states(skipped)  # type: ignore[arg-type]
+    assert skipped.calls == []
+    # A disconnect isn't swallowed: the hub cycle has to reconnect.
+    src._site.can_read_door_states = True
+    with pytest.raises(HubDisconnected):
+        await src._subscribe_door_states(Hub(HubDisconnected("gone")))  # type: ignore[arg-type]
+    await hass.config_entries.async_unload(entry.entry_id)

@@ -117,6 +117,7 @@ class FakeServer:
     controllers: list[dict[str, Any]] = field(default_factory=lambda: [controller(4001, 2001)])
     panels: list[dict[str, Any]] = field(default_factory=lambda: [panel(4002)])
     events: list[dict[str, Any]] = field(default_factory=lambda: [event(100), event(99)])
+    door_states: dict[int, str] = field(default_factory=lambda: {2001: "2", 2002: "1"})  # StateValue per door
     status: dict[str, int] = field(default_factory=dict)  # path -> forced HTTP status
     down: set[str] = field(default_factory=set)  # targets that can't be reached
     expire_tokens: int = 0  # reject this many authed calls with 401
@@ -186,6 +187,14 @@ class FakeServer:
             return Response(200, self.panels)
         if path.startswith("/api/v2/Events/?page=0"):
             return Response(200, {"Result": sorted(self.events, key=lambda e: -int(e["EventId"], 16)), "TotalPages": 1})
+        if method == "POST" and path == "/api/v1/Appliance/Connector/Status":
+            ids = json.loads(body or "[]")
+            rows = [
+                {"$type": "ApplianceStateDto", "StateValue": self.door_states[i], "Metric": 0, "EntityId": i, "Subnet": None}
+                for i in ids
+                if i in self.door_states
+            ]
+            return Response(200, rows)
         if path == "/api/v2/System/ActivateAppliances":
             return Response(200, None)
         return Response(404, None)

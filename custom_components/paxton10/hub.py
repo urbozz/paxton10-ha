@@ -23,12 +23,12 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlencode
 
 import aiohttp
 
-from .api import PaxtonBlockedRequest, PaxtonError
+from .api import PaxtonBlockedRequest, PaxtonError, RemoteTransport
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -232,9 +232,89 @@ class LongPollHub:
         self._groups_token = None
 
 
+class LiveFeed(Protocol):
+    """What LiveSource needs from a hub connection, Direct or Remote."""
+
+    @property
+    def connected(self) -> bool: ...
+
+    async def connect(self) -> None: ...
+
+    async def invoke(self, method: str, *args: Any) -> Any: ...
+
+    async def poll(self) -> list[HubMessage]: ...
+
+    async def close(self) -> None: ...
+
+
+class RemoteFeed:
+    """The same hub calls and pushes on Remote, carried on the relay websocket RemoteTransport holds.
+
+    The web UI's HubRemote doesn't open a second connection: it wraps each hub call as
+    UiSignalrMessage and receives pushes as ServerSignalrMessage on the REST socket. Closing the
+    feed stops listening; the socket stays open for REST calls.
+    """
+
+    def __init__(self, transport: RemoteTransport, token: Callable[[], str | None]) -> None:
+        self._transport = transport
+        self._token = token
+        self._queue: asyncio.Queue[tuple[str, list[Any]] | None] | None = None
+
+    @property
+    def connected(self) -> bool:
+        return self._queue is not None and self._transport.is_open
+
+    async def connect(self) -> None:
+        if not self._transport.is_open:
+            raise HubDisconnected("remote connection is not open")
+        self._queue = self._transport.listen()
+
+    async def invoke(self, method: str, *args: Any) -> Any:
+        if method not in HUB_METHOD_ALLOWLIST:
+            raise PaxtonBlockedRequest(f"hub method {method} is not on the allowlist")
+        if not self.connected:
+            raise HubDisconnected("hub is not connected")
+        return await self._transport.hub_invoke(method, list(args), self._token())
+
+    async def poll(self) -> list[HubMessage]:
+        """Wait for the next push, then take any others already queued."""
+        if self._queue is None:
+            raise HubDisconnected("hub is not connected")
+        items = [await self._queue.get()]
+        while not self._queue.empty():
+            items.append(self._queue.get_nowait())
+        messages: list[HubMessage] = []
+        closed = False
+        for item in items:
+            if item is None:
+                closed = True
+            else:
+                messages.append(HubMessage(HUB_NAME, *item))
+        if closed:
+            # Deliver what arrived before the close first; the next poll reports the disconnect.
+            self._queue = None
+            if not messages:
+                raise HubDisconnected("hub: the remote connection closed")
+        return messages
+
+    async def close(self) -> None:
+        if self._queue is not None:
+            self._transport.stop_listening(self._queue)
+            self._queue = None
+
+
 def event_rows(message: HubMessage) -> list[dict[str, Any]]:
     """The event rows in a newLiveEventNotification push, newest first like the event log page."""
     if message.method.lower() != NOTIFY_EVENTS.lower() or not message.args:
+        return []
+    first = message.args[0]
+    rows = first if isinstance(first, list) else message.args
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def door_state_rows(message: HubMessage) -> list[dict[str, Any]]:
+    """The rows in an applianceStateNotification push: EntityId and StateValue per changed door."""
+    if message.method.lower() != NOTIFY_DOOR_STATE.lower() or not message.args:
         return []
     first = message.args[0]
     rows = first if isinstance(first, list) else message.args

@@ -41,6 +41,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: Paxton1
         "can_read_devices": site.can_read_devices,
         "can_read_summary": site.can_read_summary,
         "summary": site.summary,
+        "can_read_door_states": site.can_read_door_states,
+        "door_states": site.door_states,
         "doors": [asdict(d) for d in site.doors.values()],
         "devices": [async_redact_data(asdict(d), TO_REDACT) for d in site.devices.values()],
     }
