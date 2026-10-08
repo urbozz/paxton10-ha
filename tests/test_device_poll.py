@@ -139,3 +139,57 @@ async def test_nap_wakes_early(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(source_mod, "_sleep", quick)
     await source_mod._nap(5, None)
     assert plain == [5]
+
+
+@pytest.mark.parametrize("trigger", ["count_change", "hardware_event"])
+async def test_failed_list_read_keeps_the_trigger_and_the_cheap_data(
+    hass: HomeAssistant, server: FakeServer, clock: dict[str, float], monkeypatch: pytest.MonkeyPatch, trigger: str
+) -> None:
+    """Regression (v0.7.0 review): a failed list read used up its trigger and dropped the summary and door states."""
+    from custom_components.paxton10.api import PaxtonError
+
+    src = await stopped(hass)
+    coord = coordinator(hass.config_entries.async_entries("paxton10")[0])
+    received: list[Any] = []
+
+    async def cb(update: Any) -> None:
+        received.append(update)
+        await coord._async_handle_update(update)
+
+    src._callback = cb
+    real_summary, real_devices = source_mod.read_summary, source_mod.read_devices
+    if trigger == "count_change":
+
+        async def offline_one(conn: Any) -> dict[str, int]:
+            return {**(await real_summary(conn)), "offline_devices": 1}
+
+        monkeypatch.setattr(source_mod, "read_summary", offline_one)
+    else:
+        src.request_device_refresh()
+
+    async def timeout(conn: Any) -> Any:
+        raise PaxtonError("GET devices: no reply within 20 s")
+
+    monkeypatch.setattr(source_mod, "read_devices", timeout)
+    server.door_states[2001] = "1"
+    with pytest.raises(PaxtonError):
+        await src.poll_devices()
+    # The summary and door states were handed on, and the trigger is still pending.
+    assert received[-1].kind == "status" and received[-1].summary and received[-1].door_states == {2001: 1, 2002: 1}
+    assert src._devices_requested
+    await hass.async_block_till_done()
+    assert coord.data.door_states[2001] == 1
+
+    # The run loop reports the device failure; a second failed retry doesn't flicker entities back.
+    await coord._async_handle_update(source_mod.SourceUpdate("devices", error=PaxtonError("timeout")))
+    assert not coord.last_update_success
+    with pytest.raises(PaxtonError):
+        await src.poll_devices()
+    assert not coord.last_update_success
+
+    # The next poll retries straight away (no 10-minute wait) and recovers.
+    monkeypatch.setattr(source_mod, "read_devices", real_devices)
+    await src.poll_devices()
+    assert not src._devices_requested
+    assert received[-1].kind == "devices" and received[-1].devices
+    assert coord.last_update_success

@@ -13,7 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -61,6 +61,7 @@ NO_TIME = datetime(2000, 1, 1, tzinfo=timezone.utc)  # sorts events without a ti
 KIND_DEVICES = "devices"
 KIND_EVENTS = "events"
 KIND_DOOR_STATES = "door_states"  # live door state pushes; polled door state comes with KIND_DEVICES
+KIND_STATUS = "status"  # the cheap part of a device poll, delivered on its own when the list read fails
 
 
 @dataclass
@@ -246,13 +247,23 @@ class PollingSource(UpdateSource):
                 }
         due = _monotonic() - self._devices_read_at >= self._device_full_interval
         if self._site.can_read_devices and (full or due or self._devices_requested or not self._site.can_read_summary):
-            self._devices_requested = False
             try:
                 update.devices = await read_devices(self._conn)
                 name_hardware(update.devices, self._site.doors)
-                self._devices_read_at = _monotonic()
             except PaxtonForbidden:
                 self._site.can_read_devices = False
+            except PaxtonError:
+                # Keep the reason for this read (a count change or a hardware event), so the next
+                # poll tries again rather than waiting for the full refresh. Hand on the summary and
+                # door states already read. As KIND_STATUS they don't clear the device failure that
+                # the run loop reports next, so entities don't flicker back between failed retries.
+                self._devices_requested = True
+                if self._callback and (update.summary is not None or update.door_states is not None):
+                    await self._callback(replace(update, kind=KIND_STATUS))
+                raise
+            else:
+                self._devices_read_at = _monotonic()
+            self._devices_requested = False
         if self._callback:
             await self._callback(update)
 
