@@ -77,6 +77,12 @@
           "on": "mdi:lock-open-variant",
           "off": "mdi:lock"
         }
+      },
+      "forced_or_left_open": {
+        "default": "mdi:door-closed",
+        "state": {
+          "on": "mdi:door-open"
+        }
       }
     }
   }

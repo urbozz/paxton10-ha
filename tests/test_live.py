@@ -877,3 +877,36 @@ async def test_door_state_edges(hass: HomeAssistant, server: FakeServer, fast_sl
     with pytest.raises(HubDisconnected):
         await src._subscribe_door_states(Hub(HubDisconnected("gone")))  # type: ignore[arg-type]
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_forced_or_left_open_sensor(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
+) -> None:
+    """Untested on a live site: state 3 is from the web app's enum. The sensor starts disabled."""
+    from homeassistant.const import (
+        STATE_OFF,
+        STATE_ON,
+        STATE_UNAVAILABLE,
+        STATE_UNKNOWN,
+    )
+    from homeassistant.helpers import entity_registry as er
+
+    entry = await setup(hass)
+    registry = er.async_get(hass)
+    alarm = "binary_sensor.main_entrance_door_forced_or_left_open"
+    reg = registry.async_get(alarm)
+    assert reg and reg.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert hass.states.get(alarm) is None
+
+    registry.async_update_entity(alarm, disabled_by=None)
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    st = hass.states.get(alarm)
+    assert st and st.state == STATE_OFF and st.attributes["device_class"] == "problem"
+    for value, state in (("3", STATE_ON), ("1", STATE_OFF), ("5", STATE_OFF), ("9", STATE_UNKNOWN), ("4", STATE_UNAVAILABLE)):
+        server.door_states[2001] = value
+        hub.pushes.put_nowait(door_push(2001, value))
+        await until(lambda: (s := hass.states.get(alarm)) is not None and s.state == state, hass)  # noqa: B023
+    await hass.config_entries.async_unload(entry.entry_id)

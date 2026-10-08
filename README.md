@@ -96,6 +96,7 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 | Door | Open (button) | Only when **Allow door control** is on. The door opens for its configured open time, then relocks. There's no lock command. |
 | Door | Event (event) | Named after the door, for example `event.main_entrance_door`. See [Events](#events). |
 | Door | Lock (binary sensor) | On while the door is unlocked: for its open time after a fob, exit button, or **Open** press, or while held open. Off while locked. The `door_state` attribute gives Paxton's state: `locked`, `unlocked`, `forced_or_left_open`, `offline`, or `online`. Unavailable while Paxton reports the door offline. Created only if the server and account can read door state. |
+| Door | Forced or left open (binary sensor) | **Untested.** Disabled by default. On while Paxton reports the door forced or left open. Needs a door contact fitted and wired to the controller. Built from the Paxton10 web app's door states, but no live site has reported this state yet, so how and when it clears is unconfirmed. Turn it on per door in the entity settings, and report what you see. |
 | Controller and entry panel | Connectivity (binary sensor) | Diagnostic. On while the device is connected to the server, including while it runs on battery, updates its firmware, or refreshes. Off while it's offline, rebooting, or reinstating. |
 | Controller and entry panel | Status | Diagnostic. `online`, `online_on_battery`, `updating`, `offline`, `refreshing`, `reinstating`, or `rebooting`, as the web app shows them. `online_on_battery` means the controller has lost mains power. |
 | Controller and entry panel | Firmware | Diagnostic. |
@@ -231,6 +232,7 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - The API is undocumented and can change with any Paxton upgrade.
 - While the live feed is down, events are polled. A door event can then take up to the event interval to appear.
 - The Lock sensor shows the lock state, not whether the door is physically open. Paxton only reports forced or left open with a door contact fitted, and the integration then shows it as unlocked, with `door_state` set to `forced_or_left_open`.
+- The **Forced or left open** sensor is untested on a live site. The forced and left open door events (`forced`, `left_open`) are separate: they come from Paxton's events, live or from the log, and don't depend on this sensor.
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
 - Device status and the summary are always polled.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.

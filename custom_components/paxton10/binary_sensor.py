@@ -14,6 +14,7 @@ from .models import (
     DOOR_FORCED_OR_LEFT_OPEN,
     DOOR_LOCKED,
     DOOR_OFFLINE,
+    DOOR_ONLINE,
     DOOR_STATES,
     DOOR_UNLOCKED,
     Device,
@@ -37,7 +38,10 @@ async def async_setup_entry(
         add_entities_dynamically(
             entry,
             lambda: coordinator.data.doors,
-            lambda d: [DoorLockSensor(coordinator, coordinator.data.doors[d])],
+            lambda d: [
+                DoorLockSensor(coordinator, coordinator.data.doors[d]),
+                DoorAlarmSensor(coordinator, coordinator.data.doors[d]),
+            ],
             async_add_entities,
         )
 
@@ -55,7 +59,19 @@ class ConnectivitySensor(HardwareEntity, BinarySensorEntity):
         return device.online if device else None
 
 
-class DoorLockSensor(DoorEntity, BinarySensorEntity):
+class DoorStateEntity(DoorEntity, BinarySensorEntity):
+    """A door sensor fed by Paxton's door state. Unavailable while Paxton reports the door offline."""
+
+    @property
+    def _state(self) -> int | None:
+        return self.coordinator.data.door_states.get(self.door_id)
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._state != DOOR_OFFLINE
+
+
+class DoorLockSensor(DoorStateEntity):
     """On while the door is unlocked: for its open time after a release, or held open.
 
     Paxton reports the lock state, not a door contact. Forced or left open (which needs a
@@ -66,14 +82,6 @@ class DoorLockSensor(DoorEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: Paxton10Coordinator, door: Door) -> None:
         super().__init__(coordinator, door, "lock")
-
-    @property
-    def _state(self) -> int | None:
-        return self.coordinator.data.door_states.get(self.door_id)
-
-    @property
-    def available(self) -> bool:
-        return super().available and self._state != DOOR_OFFLINE
 
     @property
     def is_on(self) -> bool | None:
@@ -88,3 +96,28 @@ class DoorLockSensor(DoorEntity, BinarySensorEntity):
     def extra_state_attributes(self) -> dict[str, object]:
         state = self._state
         return {"door_state": DOOR_STATES.get(state, "unknown") if state is not None else None}
+
+
+class DoorAlarmSensor(DoorStateEntity):
+    """On while Paxton reports the door forced or left open.
+
+    UNTESTED: built from the Paxton10 4.11 web app's ApplianceState enum (forcedLeftOpenAlarm = 3).
+    No live site has reported state 3 yet: it needs a door contact, and the test site has none
+    wired. Disabled by default until confirmed. How the state clears (relock, close, or alarm
+    acknowledgement) is also unconfirmed.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: Paxton10Coordinator, door: Door) -> None:
+        super().__init__(coordinator, door, "forced_or_left_open")
+
+    @property
+    def is_on(self) -> bool | None:
+        state = self._state
+        if state == DOOR_FORCED_OR_LEFT_OPEN:
+            return True
+        if state in (DOOR_UNLOCKED, DOOR_LOCKED, DOOR_ONLINE):
+            return False
+        return None

@@ -157,6 +157,9 @@
             }
           }
         }
+      },
+      "forced_or_left_open": {
+        "name": "Forced or left open"
       }
     },
     "button": {
