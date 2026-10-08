@@ -10,7 +10,7 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 - Home Assistant 2026.10 or later, including the 2026.10 betas.
 - A network path from Home Assistant to the Paxton10 server (Direct), or Paxton remote access turned on for the site (Remote).
-- A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs.
+- A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs: see [Paxton account permissions](#paxton-account-permissions).
 
 ## Install
 
@@ -59,13 +59,26 @@ Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in exp
 
 To change the connection later, open the integration and click **Reconfigure**. Reconfigure refuses a server that belongs to a different site. If the password changes, Home Assistant asks you to sign in again.
 
+## Paxton account permissions
+
+Paxton10 controls what an account can do with two kinds of permission. Building permissions say which doors the user can open. Software permissions say what the user can see and change in the Paxton10 software, set per group as Full, Read, or Events.
+
+| What the integration does | What the Paxton account needs |
+|---|---|
+| Door state, the Lock sensor, and door events | Events or Read permission on the doors. |
+| The event log | The **Reports** software permission. Without it, the integration logs a warning and fires no door events. Everything else keeps working. |
+| Controllers, entry panels, and the summary | Permission to see them in Paxton10. The exact setting hasn't been mapped yet. Without it, those entities aren't created. |
+| **Open** buttons | Building permission to each door: the same access the user would need to open it with a credential. Without it, the release fails. |
+
+The integration never changes Paxton's configuration, so it doesn't need Full permission.
+
 ## Options
 
 Open the integration and click **Configure**.
 
 | Option | Default | Description |
 |---|---|---|
-| Allow door control | Off | Adds an **Open** button for each door, gate, and barrier. When off, Home Assistant creates no buttons and the client refuses every write. |
+| Allow door control | Off | Adds an **Open** button for each door, gate, and barrier (Paxton calls them access points). When off, Home Assistant creates no buttons and the client refuses every write. |
 | Device status interval | 30 s | How often to read the system summary and door lock state. These are small. Minimum 10 s. |
 | Full device refresh | 10 min | How often to read the full controller and entry panel list when nothing has changed. It's large, so it's also read straight away when it's needed: see [How data updates](#how-data-updates). Minimum 60 s. |
 | Event interval | 10 s | How often to read the event log while the live feed is down. Minimum 5 s. |
@@ -95,9 +108,9 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 |---|---|---|
 | Server | Active users, Total users, Unacknowledged alarms, Offline devices | From `System/Summary`. Created only if the account can read it. |
 | Server | Total devices, Software version | Diagnostic. |
-| Door | Open (button) | Only when **Allow door control** is on. The door opens for its configured open time, then relocks. There's no lock command. |
+| Door | Open (button) | Only when **Allow door control** is on. Releases the door for its door open time, the same as opening it from the Paxton10 software, then it relocks. There's no command to keep a door unlocked or to lock it: see [Known limitations](#known-limitations). If Paxton accepts the request but the door doesn't unlock within 5 seconds, the press fails with an error. |
 | Door | Event (event) | Named after the door, for example `event.main_entrance_door`. See [Events](#events). |
-| Door | Lock (binary sensor) | On while the door is unlocked: for its open time after a fob, exit button, or **Open** press, or while held open. Off while locked. The `door_state` attribute gives Paxton's state: `locked`, `unlocked`, `forced_or_left_open`, `offline`, or `online`. Unavailable while Paxton reports the door offline. Created only if the server and account can read door state. |
+| Door | Lock (binary sensor) | On while the door is unlocked: for its door open time after a credential, exit button, or **Open** press, while a time profile or toggle operating mode keeps it unlocked, while a fire alarm releases it, or while it's held open. Off while locked. The `door_state` attribute gives Paxton's state: `locked`, `unlocked`, `forced_or_left_open`, `offline`, or `online`. Unavailable while Paxton reports the door offline. Created only if the server and account can read door state. |
 | Door | Forced or left open (binary sensor) | **Untested.** Disabled by default. On while Paxton reports the door forced or left open. Needs a door contact fitted and wired to the controller. Built from the Paxton10 web app's door states, but no live site has reported this state yet, so how and when it clears is unconfirmed. Turn it on per door in the entity settings, and report what you see. |
 | Controller and entry panel | Connectivity (binary sensor) | Diagnostic. On while the device is connected to the server, including while it runs on battery, updates its firmware, or refreshes. Off while it's offline, rebooting, or reinstating. |
 | Controller and entry panel | Status | Diagnostic. `online`, `online_on_battery`, `updating`, `offline`, `refreshing`, `reinstating`, or `rebooting`, as the web app shows them. `online_on_battery` means the controller has lost mains power. |
@@ -144,7 +157,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `call_made` | 145 | Someone called a user from the entry panel. |
 | `call_not_answered` | 142 | The called user didn't answer. |
 | `unlocked`, `relocked` | 8, 9 | A time profile unlocked or relocked the door. |
-| `toggled_open`, `toggled_closed` | 17, 18 | The door was toggled open or closed. |
+| `toggled_open`, `toggled_closed` | 17, 18 | The door was toggled unlocked or locked again, by a credential in toggle operating mode or by a trigger and action. |
 | `left_open` | 10 | The door was left open. |
 | `closed` | 11 | The door closed. |
 | `forced` | 16 | The door was forced open. |
@@ -233,7 +246,10 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 
 ## Known limitations
 
-- The API is undocumented and can change with any Paxton upgrade.
+- The API is undocumented and can change with any Paxton upgrade. Paxton publishes integration documentation for Net2 only, not Paxton10.
+- Paxton10 has no software command to keep a door unlocked or to lock it. Its software open is a timed release, which is what the **Open** button sends. A door stays unlocked only through Paxton10's own configuration: toggle operating mode, a time profile, triggers and actions, or a fire alarm. That's why the integration has an **Open** button and a Lock sensor, not a lock entity.
+- Paxton10 doesn't open a door from software while an intruder alarm covering it is armed, or while the door is in lockdown, unless the account is exempt from the lockdown. Paxton accepts the request anyway, so the integration waits up to 5 seconds for the door to unlock, and fails the press if it doesn't. Without door state, it can't check, and the press always succeeds.
+- Lockdown events (lockdown activated or deactivated, doors entering or leaving lockdown) arrive as `other`.
 - While the live feed is down, events are polled. A door event can then take up to the event interval to appear.
 - The Lock sensor shows the lock state, not whether the door is physically open. Paxton only reports forced or left open with a door contact fitted, and the integration then shows it as unlocked, with `door_state` set to `forced_or_left_open`.
 - The **Forced or left open** sensor is untested on a live site. The forced and left open door events (`forced`, `left_open`) are separate: they come from Paxton's events, live or from the log, and don't depend on this sensor.
@@ -259,6 +275,7 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 |---|---|
 | **Can't connect** during setup | For Direct, check that Home Assistant can reach the server on port 443. For Remote, check that remote access is on in Paxton10. |
 | **The username or password is wrong** | Sign in to the Paxton10 web UI with the same account. |
+| **Open** fails: the door didn't unlock within 5 seconds | Check whether an intruder alarm covering the door is armed, whether the door is in lockdown, and whether the door is online. Also check that the account has building permission to the door. |
 | Fewer entities than expected | The account may lack permission for devices or the summary. Try an administrator account to compare. |
 | No door events, and the log says the account can't read the event log | The Paxton account lacks the **Reports** permission, which the event log needs. Everything else keeps working without it. Grant the permission in Paxton10, then reload the integration. |
 | No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
