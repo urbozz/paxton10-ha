@@ -15,6 +15,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 from .api import PaxtonAuthError, PaxtonError
 from .connection import PaxtonConnection, PaxtonForbidden
@@ -223,6 +224,15 @@ class PollingSource(UpdateSource):
         self._seen_set.add(event_id)
 
 
+def _unnamed_user(row: dict[str, Any]) -> bool:
+    """A row about a user (UserData has a UserId) that doesn't say who."""
+    user = row.get("UserData")
+    if not isinstance(user, dict) or not isinstance(user.get("UserId"), int):
+        return False
+    parsed = parse_event(row, include_user=True)
+    return parsed is not None and parsed.user_name is None
+
+
 class LiveSource(PollingSource):
     """Takes events from the server's live hub on Direct, and polls everything else.
 
@@ -294,12 +304,17 @@ class LiveSource(PollingSource):
             messages = await hub.poll()
             rows = [row for message in messages for row in event_rows(message)]
             if rows:
-                await self._deliver(self._parse_newest_first(rows))
+                events = self._parse_newest_first(rows)
+                if self._include_user_names and any(_unnamed_user(row) for row in rows):
+                    # Live rows carry the user's id but not their name. The event log row has the
+                    # name, so fire from there. Anything not on the page yet still fires below.
+                    await self._poll_once()
+                await self._deliver(events)
             if _monotonic() - last_reconcile >= RECONCILE_INTERVAL:
                 await self._poll_once()
                 last_reconcile = _monotonic()
 
-    def _parse_newest_first(self, rows: list[dict[str, object]]) -> list[DoorEvent]:
+    def _parse_newest_first(self, rows: list[dict[str, Any]]) -> list[DoorEvent]:
         events = [e for e in (parse_event(r, self._include_user_names) for r in rows) if e]
         # A push can hold several rows. Order them like a log page, newest first, by event time.
         return sorted(events, key=lambda e: e.time or NO_TIME, reverse=True)

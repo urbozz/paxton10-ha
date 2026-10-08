@@ -504,3 +504,32 @@ async def test_polling_source_still_polls_events(
     finally:
         await plain.async_stop()
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_live_takes_user_names_from_the_event_log(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
+) -> None:
+    """Live rows carry the user's id but not their name. With names on, the event log supplies it."""
+    from custom_components.paxton10.const import OPT_INCLUDE_USER_NAMES
+
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    fired = capture(hass)
+    polls = len(server.sent("POST", EVENTS))
+
+    server.events.append(event(101, 5, user={"UserId": 7, "UserName": "Alex Smith"}))
+    hub.pushes.put_nowait([event(101, 5, user={"UserId": 7, "UserName": None})])
+    await until(lambda: len(fired) == 1, hass)
+    assert fired[0].data["user_name"] == "Alex Smith"
+    assert len(server.sent("POST", EVENTS)) == polls + 1
+
+    # Not on the page yet: it still fires, without the name, and only once.
+    hub.pushes.put_nowait([event(102, 5, user={"UserId": 7})])
+    await until(lambda: len(fired) == 2, hass)
+    assert fired[1].data.get("user_name") is None
+    # A row with no user, or a name already, needs no extra read.
+    hub.pushes.put_nowait([event(103, 7), event(104, 5, user={"UserId": 8, "UserName": "Sam Lee"})])
+    await until(lambda: len(fired) == 4, hass)
+    assert len(server.sent("POST", EVENTS)) == polls + 2
+    await hass.config_entries.async_unload(entry.entry_id)

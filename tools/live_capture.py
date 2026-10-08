@@ -95,6 +95,16 @@ async def run(args: argparse.Namespace) -> int:
     password = read_password(args.clipboard)
     log: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
+    try:
+        return await capture(args, username, password, log, events)
+    finally:
+        # Also on Ctrl+C, so a capture stopped early still leaves its report.
+        write_report(args.out, log, events)
+
+
+async def capture(
+    args: argparse.Namespace, username: str, password: str, log: list[dict[str, Any]], events: list[dict[str, Any]]
+) -> int:
     async with aiohttp.ClientSession() as session:
         transport = DirectTransport(session, args.direct)
         client = PaxtonClient(transport)
@@ -166,10 +176,13 @@ async def run(args: argparse.Namespace) -> int:
             await hub.close()
             await client.close()
 
-    out = Path(args.out or "probe-live-direct.json")
+    return 0
+
+
+def write_report(path: str | None, log: list[dict[str, Any]], events: list[dict[str, Any]]) -> None:
+    out = Path(path or "probe-live-direct.json")
     out.write_text(json.dumps({"log": log, "events": events}, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"\n{len(events)} live event(s). Report: {out}")
-    return 0
 
 
 def main() -> int:
