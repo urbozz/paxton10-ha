@@ -241,7 +241,7 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
 - Device status and the summary are always polled. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list, and haven't been seen on a live site yet.
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
-- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes, or when something changes, rather than every 30 seconds: for 13 controllers, about 150 MB a day in total instead of over 2 GB.
+- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes, or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller at the 10-minute default (it was about 165 MB a day per controller at 30 seconds), plus a few tens of MB a day for the rest, depending on how busy the doors are.
 - The server isn't discovered automatically. Enter its address yourself.
 - When the integration switches from the fallback route back to the main route, a call already in flight on the fallback connection can fail. The next poll uses the main route.
 
