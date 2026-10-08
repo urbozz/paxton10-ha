@@ -150,7 +150,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `closed` | 11 | The door closed. |
 | `forced` | 16 | The door was forced open. |
 
-The numbers come from the Paxton10 4.11 web app, except the intercom types, which were read from a live event log. Types 2, 3, 4, 17, and 18 haven't been seen live yet, so their descriptions follow the web app's names for them.
+The numbers come from the Paxton10 4.11 web app, except the intercom types, which were read from a live event log. Types 2, 3, 4, 8 to 11, 16, 17, and 18 haven't been seen live yet, so their descriptions follow the web app's names for them.
 
 Events from before Home Assistant started are never replayed.
 
@@ -264,6 +264,8 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 | No door events, and the log says the account can't read the event log | The Paxton account lacks the **Reports** permission, which the event log needs. Everything else keeps working without it. Grant the permission in Paxton10, then reload the integration. |
 | No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
 | **Paxton10 is using the fallback route** repair | The main route failed. Check the network path. The repair clears itself once the main route works again. |
+
+For more answers, see the [FAQ](https://github.com/urbozz/paxton10-ha/wiki/FAQ) in the wiki.
 
 Debug logging:
 
