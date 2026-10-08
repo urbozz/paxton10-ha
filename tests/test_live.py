@@ -912,17 +912,17 @@ async def test_forced_or_left_open_sensor(
     await hass.config_entries.async_unload(entry.entry_id)
 
 
-@pytest.mark.parametrize(("names", "descriptions"), [(True, True), (False, True), (True, False)])
-async def test_credential_description_option(
-    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float], names: bool, descriptions: bool
+@pytest.mark.parametrize(("names", "cred_names"), [(True, True), (False, True), (True, False)])
+async def test_credential_name_option(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float], names: bool, cred_names: bool
 ) -> None:
-    """The raw description only appears with its own option on, independent of user names."""
+    """The credential name only appears with its own option on, independent of user names."""
     from custom_components.paxton10.const import (
-        OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS,
+        OPT_INCLUDE_CREDENTIAL_NAMES,
         OPT_INCLUDE_USER_NAMES,
     )
 
-    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: names, OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS: descriptions})
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: names, OPT_INCLUDE_CREDENTIAL_NAMES: cred_names})
     src = live(entry)
     await until(lambda: src.mode == MODE_LIVE)
     fired = capture(hass)
@@ -933,9 +933,9 @@ async def test_credential_description_option(
     hub.pushes.put_nowait([fob])
     await until(lambda: len(fired) == 1, hass)
     attrs = hass.states.get("event.main_entrance_door").attributes  # type: ignore[union-attr]
-    expected = "alex.smith@example.com" if descriptions else None
-    assert fired[0].data.get("credential_description") == expected
-    assert attrs.get("credential_description") == expected
+    expected = "alex.smith@example.com" if cred_names else None
+    assert fired[0].data.get("credential_name") == expected
+    assert attrs.get("credential_name") == expected
     # The email is never mistaken for a credential type, and the number never appears.
     assert fired[0].data.get("credential") is None and "credential" not in attrs
     assert "12345678" not in str(fired[0].data) and "12345678" not in str(attrs)

@@ -103,14 +103,14 @@ class PollingSource(UpdateSource):
         device_interval: float,
         event_interval: float,
         include_user_names: bool,
-        include_credential_descriptions: bool = False,
+        include_credential_names: bool = False,
     ) -> None:
         self._conn = conn
         self._site = site
         self._device_interval = device_interval
         self._event_interval = event_interval
         self._include_user_names = include_user_names
-        self._include_credential_descriptions = include_credential_descriptions
+        self._include_credential_names = include_credential_names
         self._callback: UpdateCallback | None = None
         self._tasks: list[asyncio.Task[None]] = []
         self.last_event_id: str | None = None  # newest event seen, for diagnostics
@@ -219,7 +219,7 @@ class PollingSource(UpdateSource):
         if not isinstance(raw, list):
             raise PaxtonError("event poll returned no Result list")
         # The page is newest first. Event ids don't sort, so new means not seen before.
-        events = [e for e in (parse_event(r, self._include_user_names, self._include_credential_descriptions) for r in raw if isinstance(r, dict)) if e]
+        events = [e for e in (parse_event(r, self._include_user_names, self._include_credential_names) for r in raw if isinstance(r, dict)) if e]
         if self._baselined and events and all(e.event_id not in self._seen_set for e in events):
             _LOGGER.debug("Every event on the page is new, so some may have been missed")
         # A successful poll always reports, even with nothing new: that clears an earlier failure.
@@ -376,7 +376,7 @@ class LiveSource(PollingSource):
                 last_reconcile = _monotonic()
 
     def _parse_newest_first(self, rows: list[dict[str, Any]]) -> list[DoorEvent]:
-        events = [e for e in (parse_event(r, self._include_user_names, self._include_credential_descriptions) for r in rows) if e]
+        events = [e for e in (parse_event(r, self._include_user_names, self._include_credential_names) for r in rows) if e]
         # A push can hold several rows. Order them like a log page, newest first, by event time.
         return sorted(events, key=lambda e: e.time or NO_TIME, reverse=True)
 

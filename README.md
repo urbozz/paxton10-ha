@@ -71,7 +71,7 @@ Open the integration and click **Configure**.
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
 | Include user names in events | Off | Adds the user's name to door events. User names are personal data. |
-| Include credential descriptions in events | Off | Adds `credential_description` to access events: the credential's description exactly as someone typed it in Paxton. It's free text, so it can be a person's email address, a name, a date, or a note. Turn it on only if you need it, and treat Home Assistant's history as holding personal data. |
+| Include credential names in events | Off | Adds `credential_name` to access events: the name the credential was given in Paxton, as it was entered. |
 
 Changing an option reloads the integration.
 
@@ -124,8 +124,8 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `door_entity_id`, `door_name` | The door's numeric ID and name in Paxton. Both are `null` for events that aren't about a known door. |
 | `time` | When the event happened, in ISO 8601 format. |
 | `user_name` | Only when **Include user names in events** is on. For intercom events, the user who was called. |
-| `credential` | Only when **Include user names in events** is on. The type of credential used, for example `keyfob`, `hands_free_credential`, `smart_credential`, or `pin`. Access events only. Paxton only labels a credential with free text, so the type is given only when that text is plainly a type name (with at most a number or date after it). Otherwise there's no `credential`. The text itself, and the credential's number, are never included. |
-| `credential_description` | Only when **Include credential descriptions in events** is on. The credential's description as typed in Paxton. Free text, possibly personal. Never the credential's number. |
+| `credential` | Only when **Include user names in events** is on. The type of credential used, for example `keyfob`, `hands_free_credential`, `smart_credential`, or `pin`. Access events only. Paxton has no type field on events, only the name the credential was given, so the type is set only when that name is plainly a type name (with at most a number or date after it). For the name itself, see `credential_name`. |
+| `credential_name` | Only when **Include credential names in events** is on. The name the credential was given in Paxton. Never the credential's number. |
 | `config_entry_id` | The integration entry the event came from. |
 
 ### Event types

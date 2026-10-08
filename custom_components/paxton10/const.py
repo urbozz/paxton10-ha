@@ -21,7 +21,7 @@ OPT_EVENT_INTERVAL = "event_interval"
 OPT_FALLBACK = "fallback"
 OPT_FALLBACK_TARGET = "fallback_target"
 OPT_INCLUDE_USER_NAMES = "include_user_names"
-OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS = "include_credential_descriptions"
+OPT_INCLUDE_CREDENTIAL_NAMES = "include_credential_names"
 
 DEFAULT_DEVICE_INTERVAL = 30
 DEFAULT_EVENT_INTERVAL = 10
@@ -69,9 +69,9 @@ EVENT_TYPE_OTHER = "other"
 
 
 # Paxton's credential type names (the web app's CredentialTypes list), keyed by letters only.
-# CredentialData.Credential on an event is the credential's free-text description: often just the
-# type name, sometimes with a number, but also an email address, a date, or a note. Only a plain
-# type name is ever turned into a credential type; any other description gives none.
+# CredentialData.Credential on an event is the name the credential was given in Paxton: often just
+# the type name, sometimes with a number, but also an email address, a date, or a note. Only a plain
+# type name is turned into a credential type; any other name gives none.
 CREDENTIAL_TYPES: dict[str, str] = {
     "proximitycard": "proximity_card",
     "proximityisocard": "proximity_iso_card",

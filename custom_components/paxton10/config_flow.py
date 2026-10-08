@@ -47,7 +47,7 @@ from .const import (
     OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
-    OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS,
+    OPT_INCLUDE_CREDENTIAL_NAMES,
     OPT_INCLUDE_USER_NAMES,
     ROUTE_DIRECT,
     ROUTE_REMOTE,
@@ -323,7 +323,7 @@ class Paxton10OptionsFlow(OptionsFlow):
                 probatio.Required(OPT_FALLBACK, default=False): BooleanSelector(),
                 probatio.Optional(OPT_FALLBACK_TARGET): str,
                 probatio.Required(OPT_INCLUDE_USER_NAMES, default=False): BooleanSelector(),
-                probatio.Required(OPT_INCLUDE_CREDENTIAL_DESCRIPTIONS, default=False): BooleanSelector(),
+                probatio.Required(OPT_INCLUDE_CREDENTIAL_NAMES, default=False): BooleanSelector(),
             }
         )
         return self.async_show_form(

@@ -21,7 +21,7 @@ TO_REDACT = {
     "site_id",
     "user_name",
     "credential",
-    "credential_description",
+    "credential_name",
 }
 
 
