@@ -184,6 +184,17 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             self.hass, self._async_rediscover, REDISCOVER_INTERVAL, name="paxton10 rediscover"
         )
 
+    async def async_stop_updates(self) -> None:
+        """Stop the update tasks and close the connection, as Home Assistant shuts down.
+
+        Home Assistant doesn't unload entries on shutdown. Without this, the live hub's long poll
+        is still waiting when Home Assistant closes its HTTP sessions, and fails with an error.
+        """
+        if self.source:
+            await self.source.async_stop()
+            self.source = None
+        await self.conn.close()
+
     async def async_shutdown(self) -> None:
         if self._unsub_rediscover:
             self._unsub_rediscover()
@@ -372,6 +383,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             }
             if self.options.include_user_names:
                 data["user_name"] = event.user_name
+                data["credential"] = event.credential
             self.hass.bus.async_fire(EVENT_PAXTON10, data)
             for listener in list(self._event_listeners.get(door_id, [])):
                 listener(event)

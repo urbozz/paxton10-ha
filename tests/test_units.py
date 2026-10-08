@@ -263,3 +263,13 @@ def test_device_status(status: int | None, online: bool | None, name: str | None
     device = Device(1, KIND_CONTROLLER, "c", "m", None, None, None, status, None)
     assert device.online is online
     assert {d.key: d for d in DEVICE_SENSORS}["status"].value(device) == name
+
+
+def test_credential_label() -> None:
+    row = {"EventId": "a" * 24, "CredentialData": {"CredentialId": 22, "Credential": "Keyfob", "CredentialValue": "x"}}
+    assert parse_event(row, True).credential == "Keyfob"  # type: ignore[union-attr]
+    assert parse_event(row, False).credential is None  # type: ignore[union-attr]
+    # Older rows put it in UserData; blank or missing labels give None.
+    assert parse_event({"EventId": "b", "UserData": {"Credential": "PIN"}}, True).credential == "PIN"  # type: ignore[union-attr]
+    assert parse_event({"EventId": "c", "CredentialData": {"Credential": " "}}, True).credential is None  # type: ignore[union-attr]
+    assert parse_event({"EventId": "d", "CredentialData": None}, True).credential is None  # type: ignore[union-attr]

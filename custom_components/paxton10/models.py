@@ -125,6 +125,7 @@ class DoorEvent:
     door_ids: tuple[int, ...]
     user_name: str | None
     reader: str | None = None  # entry or exit, on access events
+    credential: str | None = None  # the credential's type label, such as "Keyfob"; with user names only
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -261,7 +262,21 @@ def parse_event(raw: dict[str, Any], include_user: bool) -> DoorEvent | None:
         door_ids=_event_door_ids(raw),
         user_name=(_user_name(raw.get("UserData")) or _intercom_user(raw)) if include_user else None,
         reader=_reader(raw),
+        credential=_credential(raw) if include_user else None,
     )
+
+
+def _credential(raw: dict[str, Any]) -> str | None:
+    """The type label of the credential used, such as "Keyfob".
+
+    Access events carry CredentialData with the credential's own id, this label, and its value
+    (the card or fob number). Only the label is kept: the id and value identify one physical
+    credential, which Home Assistant has no use for.
+    """
+    for source in (raw.get("CredentialData"), raw.get("UserData")):
+        if isinstance(source, dict) and isinstance(label := source.get("Credential"), str) and label.strip():
+            return label.strip()
+    return None
 
 
 def _intercom_user(raw: dict[str, Any]) -> str | None:

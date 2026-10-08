@@ -46,5 +46,7 @@ class DoorEventEntity(DoorEntity, EventEntity):
             attributes["reader"] = event.reader
         if self.coordinator.options.include_user_names and event.user_name:
             attributes["user_name"] = event.user_name
+        if self.coordinator.options.include_user_names and event.credential:
+            attributes["credential"] = event.credential
         self._trigger_event(event.event_type, attributes)
         self.async_write_ha_state()

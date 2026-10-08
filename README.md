@@ -121,6 +121,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `door_entity_id`, `door_name` | The door's numeric ID and name in Paxton. Both are `null` for events that aren't about a known door. |
 | `time` | When the event happened, in ISO 8601 format. |
 | `user_name` | Only when **Include user names in events** is on. For intercom events, the user who was called. |
+| `credential` | Only when **Include user names in events** is on. The type of credential used, as Paxton labels it, for example `Keyfob`. Access events only. The credential's number is never included. |
 | `config_entry_id` | The integration entry the event came from. |
 
 ### Event types

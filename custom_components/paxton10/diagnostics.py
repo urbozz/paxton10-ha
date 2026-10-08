@@ -20,6 +20,7 @@ TO_REDACT = {
     "serial",
     "site_id",
     "user_name",
+    "credential",
 }
 
 

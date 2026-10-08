@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
@@ -25,6 +25,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: Paxton10ConfigEntry) -> 
     coordinator.remove_stale_devices(coordinator.data)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    async def _async_stop(_event: Event) -> None:
+        await coordinator.async_stop_updates()
+
+    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop))
     return True
 
 
