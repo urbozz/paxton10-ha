@@ -280,6 +280,9 @@
     },
     "door_failed": {
       "message": "Couldn't open {door}: {error}"
+    },
+    "door_not_opened": {
+      "message": "Paxton10 accepted the request to open {door}, but the door didn't unlock within 5 seconds. Paxton10 doesn't open a door from software while an intruder alarm covering it is armed, or while it's in lockdown, unless the account is exempt. The door may also be offline."
     }
   },
   "issues": {

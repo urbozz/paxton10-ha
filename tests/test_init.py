@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -172,6 +173,65 @@ async def test_open_door_errors(hass: HomeAssistant, server: FakeServer, status:
             "button", "press", {"entity_id": entity_id(hass, "button", 2001, "open")}, blocking=True
         )
     assert err.value.translation_key == key
+
+
+async def test_open_door_not_opened(hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Paxton accepts a release it doesn't carry out, for example in lockdown. The press then fails."""
+    from custom_components.paxton10 import button as button_mod
+
+    monkeypatch.setattr(button_mod, "CONFIRM_TIMEOUT", 0.05)
+    monkeypatch.setattr(button_mod, "CONFIRM_POLL", 0.01)
+    await setup(hass, {OPT_ALLOW_DOOR_CONTROL: True})
+    server.release_opens = False
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "button", "press", {"entity_id": entity_id(hass, "button", 2001, "open")}, blocking=True
+        )
+    assert err.value.translation_key == "door_not_opened"
+    # The state was read again until the deadline, not just once.
+    assert len(server.sent("POST", "/api/v1/Appliance/Connector/Status")) > 2
+
+
+async def test_open_door_unconfirmable(hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the state can't be told, the press succeeds as before rather than guessing."""
+    from custom_components.paxton10 import button as button_mod
+
+    monkeypatch.setattr(button_mod, "CONFIRM_TIMEOUT", 0.05)
+    monkeypatch.setattr(button_mod, "CONFIRM_POLL", 0.01)
+    entry = await setup(hass, {OPT_ALLOW_DOOR_CONTROL: True})
+    server.release_opens = False
+    press = {"entity_id": entity_id(hass, "button", 2001, "open")}
+    # The door state read fails after the release.
+    server.status["/api/v1/Appliance/Connector/Status"] = 500
+    await hass.services.async_call("button", "press", press, blocking=True)
+    # The account can't read door state at all.
+    del server.status["/api/v1/Appliance/Connector/Status"]
+    coordinator(entry).data.can_read_door_states = False
+    await hass.services.async_call("button", "press", press, blocking=True)
+
+
+async def test_open_door_confirmed_by_push(hass: HomeAssistant, server: FakeServer) -> None:
+    """With the live feed up, a pushed unlock confirms the release without reading the state."""
+    from custom_components.paxton10.source import MODE_LIVE, SourceUpdate
+
+    entry = await setup(hass, {OPT_ALLOW_DOOR_CONTROL: True})
+    coord = coordinator(entry)
+    assert coord.source
+    coord.source.mode = MODE_LIVE  # type: ignore[attr-defined]
+    server.release_opens = False
+    reads = len(server.sent("POST", "/api/v1/Appliance/Connector/Status"))
+
+    async def push_unlock() -> None:
+        await coord._async_handle_update(SourceUpdate("door_states", door_states={2001: 1}))
+
+    task = hass.async_create_task(
+        hass.services.async_call("button", "press", {"entity_id": entity_id(hass, "button", 2001, "open")}, blocking=True)
+    )
+    while not server.sent("POST", RELEASE):
+        await asyncio.sleep(0)
+    await push_unlock()
+    await task
+    assert len(server.sent("POST", "/api/v1/Appliance/Connector/Status")) == reads
 
 
 async def test_open_door_blocked_or_gone(hass: HomeAssistant, server: FakeServer) -> None:

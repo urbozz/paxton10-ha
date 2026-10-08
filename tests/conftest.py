@@ -118,6 +118,7 @@ class FakeServer:
     panels: list[dict[str, Any]] = field(default_factory=lambda: [panel(4002)])
     events: list[dict[str, Any]] = field(default_factory=lambda: [event(100), event(99)])
     door_states: dict[int, str] = field(default_factory=lambda: {2001: "2", 2002: "1"})  # StateValue per door
+    release_opens: bool = True  # False: accept a release but leave the door locked, as during lockdown
     status: dict[str, int] = field(default_factory=dict)  # path -> forced HTTP status
     down: set[str] = field(default_factory=set)  # targets that can't be reached
     expire_tokens: int = 0  # reject this many authed calls with 401
@@ -196,6 +197,10 @@ class FakeServer:
             ]
             return Response(200, rows)
         if path == "/api/v2/System/ActivateAppliances":
+            if self.release_opens:
+                for item in json.loads(body or "[]"):
+                    if item.get("Id") in self.door_states:
+                        self.door_states[item["Id"]] = "1"
             return Response(200, None)
         return Response(404, None)
 
