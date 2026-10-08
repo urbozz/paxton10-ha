@@ -226,3 +226,49 @@ async def test_live_source_on_remote(
         relay.queue.put_nowait(None)
         await until(lambda: len(relay.calls) == 4, hass)
         await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_quiet_remote_feed_still_reconciles(
+    hass: HomeAssistant, server: FakeServer, fast_sleep: list[float], monkeypatch: pytest.MonkeyPatch  # noqa: F811
+) -> None:
+    """Regression (v0.7.1 review): a quiet Remote feed parked the live loop, so the 5-minute event log read never ran."""
+    from custom_components.paxton10 import hub as hub_mod
+    from custom_components.paxton10 import source as source_mod
+
+    relay = FakeRelay()
+    clock = {"now": 0.0}
+    monkeypatch.setattr(source_mod, "_monotonic", lambda: clock["now"])
+    monkeypatch.setattr(hub_mod, "DEFAULT_POLL_TIMEOUT", 0.01)
+
+    async def no_direct(self: PaxtonConnection) -> None:
+        return None
+
+    async def remote_hub(self: PaxtonConnection) -> Any:
+        await self.get("/api/v1/System/Software/Version")
+        return relay, lambda: "tok"
+
+    with patch.object(PaxtonConnection, "hub_target", no_direct), patch.object(PaxtonConnection, "remote_hub", remote_hub):
+        entry = await setup(hass)
+        src = source(entry)
+        await until(lambda: src.mode == MODE_LIVE)
+        fired = capture(hass)
+        # No pushes at all, but an event the feed never delivered is in the log.
+        server.events.append(event(101))
+        clock["now"] = source_mod.RECONCILE_INTERVAL + 1
+        for _ in range(200):
+            if fired:
+                break
+            await asyncio.sleep(0.01)
+            await hass.async_block_till_done()
+        assert [e.data["event_id"] for e in fired] == [eid(101)]
+        await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_remote_poll_returns_empty_when_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    from custom_components.paxton10 import hub as hub_mod
+
+    monkeypatch.setattr(hub_mod, "DEFAULT_POLL_TIMEOUT", 0.01)
+    feed = RemoteFeed(FakeRelay(), lambda: "tok")  # type: ignore[arg-type]
+    await feed.connect()
+    assert await feed.poll() == []
+    assert feed.connected

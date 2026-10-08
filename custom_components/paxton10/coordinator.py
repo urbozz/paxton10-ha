@@ -263,6 +263,9 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
             return
         if isinstance(self.source, PollingSource):
             self.source.set_site(site)
+        # Keep the door states already known: a live push may have landed while this read was in
+        # flight, and the device poll keeps them fresh anyway. New doors take the rediscovered state.
+        site = replace(site, door_states={**site.door_states, **self.data.door_states})
         self._update_fallback_issue()
         self._publish(site)
         self.remove_stale_devices(site)

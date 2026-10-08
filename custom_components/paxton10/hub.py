@@ -277,10 +277,18 @@ class RemoteFeed:
         return await self._transport.hub_invoke(method, list(args), self._token())
 
     async def poll(self) -> list[HubMessage]:
-        """Wait for the next push, then take any others already queued."""
+        """Wait for the next push, then take any others already queued.
+
+        Like the Direct long poll, return an empty batch after DEFAULT_POLL_TIMEOUT with no push,
+        so the live loop still gets its turn (the 5-minute event log read) while the site is quiet.
+        """
         if self._queue is None:
             raise HubDisconnected("hub is not connected")
-        items = [await self._queue.get()]
+        try:
+            first = await asyncio.wait_for(self._queue.get(), timeout=DEFAULT_POLL_TIMEOUT)
+        except asyncio.TimeoutError:
+            return []
+        items = [first]
         while not self._queue.empty():
             items.append(self._queue.get_nowait())
         messages: list[HubMessage] = []

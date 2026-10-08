@@ -942,3 +942,25 @@ async def test_credential_name_option(
     diag = await async_get_config_entry_diagnostics(hass, entry)
     assert "alex.smith@example.com" not in str(diag)
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_rediscovery_keeps_live_door_states(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]
+) -> None:
+    """The hourly layout read mustn't undo a newer live lock state."""
+    from homeassistant.const import STATE_ON
+
+    entry = await setup(hass)
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    await src.async_stop()  # no device polls in the way
+    lock = "binary_sensor.main_entrance_door_lock"
+    await entry.runtime_data._async_handle_update(source_mod.SourceUpdate("door_states", door_states={2001: 1}))
+    await hass.async_block_till_done()
+    assert hass.states.get(lock).state == STATE_ON  # type: ignore[union-attr]
+    # The server still reports the door locked at the moment rediscovery reads it.
+    server.door_states[2001] = "2"
+    await entry.runtime_data._async_rediscover()
+    await hass.async_block_till_done()
+    assert hass.states.get(lock).state == STATE_ON  # type: ignore[union-attr]
+    await hass.config_entries.async_unload(entry.entry_id)

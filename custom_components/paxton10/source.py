@@ -278,12 +278,15 @@ class PollingSource(UpdateSource):
         if not isinstance(raw, list):
             raise PaxtonError("event poll returned no Result list")
         # The page is newest first. Event ids don't sort, so new means not seen before.
-        events = [e for e in (parse_event(r, self._include_user_names, self._include_credential_names) for r in raw if isinstance(r, dict)) if e]
+        events = [e for e in (self._parse(r) for r in raw if isinstance(r, dict)) if e]
         if self._baselined and events and all(e.event_id not in self._seen_set for e in events):
             _LOGGER.debug("Every event on the page is new, so some may have been missed")
         # A successful poll always reports, even with nothing new: that clears an earlier failure.
         await self._deliver(events, replay=self._baselined, report_empty=True)
         self._baselined = True
+
+    def _parse(self, row: dict[str, Any]) -> DoorEvent | None:
+        return parse_event(row, self._include_user_names, self._include_credential_names)
 
     async def _deliver(self, events: list[DoorEvent], replay: bool = True, report_empty: bool = False) -> None:
         """Hand on the events not seen before, oldest first. events is newest first.
@@ -326,12 +329,12 @@ def _unnamed_user(row: dict[str, Any]) -> bool:
 
 
 class LiveSource(PollingSource):
-    """Takes events from the server's live hub on Direct, and polls everything else.
+    """Takes events and door states from the live hub, and polls everything else.
 
-    Devices and the summary are polled as in PollingSource. Events come from the hub's
-    newLiveEventNotification pushes. While the hub is down, or the active route isn't Direct
-    (the hub is only on the site network), events are polled at the event interval and the hub
-    is retried with backoff. A hub failure on its own never makes entities unavailable.
+    Devices and the summary are polled as in PollingSource. Events and door states come from
+    the hub's pushes: the server's long poll on Direct, the relay socket on Remote. While the
+    feed is down, events are polled at the event interval and the feed is retried with backoff.
+    A feed failure on its own never makes entities unavailable.
     """
 
     async def async_start(self, callback: UpdateCallback) -> None:
@@ -438,7 +441,7 @@ class LiveSource(PollingSource):
                 last_reconcile = _monotonic()
 
     def _parse_newest_first(self, rows: list[dict[str, Any]]) -> list[DoorEvent]:
-        events = [e for e in (parse_event(r, self._include_user_names, self._include_credential_names) for r in rows) if e]
+        events = [e for e in (self._parse(r) for r in rows) if e]
         # A push can hold several rows. Order them like a log page, newest first, by event time.
         return sorted(events, key=lambda e: e.time or NO_TIME, reverse=True)
 

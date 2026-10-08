@@ -332,7 +332,10 @@ def _credential(raw: dict[str, Any]) -> str | None:
 
 def _intercom_user(raw: dict[str, Any]) -> str | None:
     fields = raw.get("TranslatableFields")
-    if not isinstance(fields, dict) or (index := INTERCOM_USER_PARAM.get(fields.get("InformationTranslationKey"))) is None:  # type: ignore[arg-type]
+    if not isinstance(fields, dict):
+        return None
+    key = fields.get("InformationTranslationKey")
+    if not isinstance(key, int) or (index := INTERCOM_USER_PARAM.get(key)) is None:
         return None
     params = fields.get("Parameters")
     if not isinstance(params, list) or len(params) <= index or not isinstance(params[index], dict):

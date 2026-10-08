@@ -104,6 +104,7 @@ HARDWARE_EVENT_TYPES = frozenset(
         19, 20,  # tamper active, restored
         21, 22,  # power failure, restored
         50, 51, 52,  # battery discharging, low, critical
-        300, 301, 302, 303, 304, 305, 306,  # controller added, removed, modified, online, offline, detected, new firmware
+        # controller added, removed, modified, online, offline, detected, new firmware
+        300, 301, 302, 303, 304, 305, 306,
     }
 )
