@@ -65,7 +65,7 @@ Open the integration and click **Configure**.
 
 | Option | Default | Description |
 |---|---|---|
-| Allow door control | Off | Adds an **Open** button for each door and the gate. When off, Home Assistant creates no buttons and the client refuses every write. |
+| Allow door control | Off | Adds an **Open** button for each door, gate, and barrier. When off, Home Assistant creates no buttons and the client refuses every write. |
 | Device status interval | 30 s | How often to read the system summary and door lock state. These are small. Minimum 10 s. |
 | Full device refresh | 10 min | How often to read the full controller and entry panel list when nothing has changed. It's large, so it's also read straight away when it's needed: see [How data updates](#how-data-updates). Minimum 60 s. |
 | Event interval | 10 s | How often to read the event log while the live feed is down. Minimum 5 s. |
@@ -162,7 +162,7 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 - **Events while the live feed is down:** every event interval, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
 - **Door lock state:** live on the same feed, and also read with every device status poll. A poll never overwrites a newer live update.
 - **Summary:** every device status interval (30 s by default).
-- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware): the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (offline, online, power failure, battery low, and similar), and otherwise every full device refresh (10 minutes by default). A controller going offline shows within about one device status interval. A change that moves neither count and logs no event, such as a firmware version, can take up to the full refresh interval to show.
+- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware): the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (such as a restart, a reinstate, going offline or online, a power failure, or a low battery), and otherwise every full device refresh (10 minutes by default). A restart or reinstate shows within about a second. A controller going offline shows within about one device status interval. A change that moves neither count and logs no event, such as a firmware version, can take up to the full refresh interval to show.
 - **Layout:** every hour, the integration reads the device tree again. It adds new doors and devices, and removes devices that are no longer on the server.
 
 If the device read or an event log read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
@@ -239,8 +239,8 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - The Lock sensor shows the lock state, not whether the door is physically open. Paxton only reports forced or left open with a door contact fitted, and the integration then shows it as unlocked, with `door_state` set to `forced_or_left_open`.
 - The **Forced or left open** sensor is untested on a live site. The forced and left open door events (`forced`, `left_open`) are separate: they come from Paxton's events, live or from the log, and don't depend on this sensor.
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
-- Device status and the summary are always polled. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list, and haven't been seen on a live site yet.
-- Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
+- Controller status and the summary are polled, not pushed. Paxton accepts the live feed's controller status and battery subscriptions but sent nothing during a live controller restart and reinstate, so the integration doesn't use them. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list. Only type 12, which Paxton logs when a controller restarts or is reinstated, has been seen on a live site.
+- The Connectivity mapping comes from the Paxton10 web app's status list. Online and refreshing have been seen live. Offline, on battery, updating, rebooting, and reinstating haven't yet.
 - The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes, or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller at the 10-minute default (it was about 165 MB a day per controller at 30 seconds), plus a few tens of MB a day for the rest, depending on how busy the doors are.
 - The server isn't discovered automatically. Enter its address yourself.
 
@@ -251,7 +251,7 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 - The client never sends `DELETE`. `DELETE /api/v2/Events/All` wipes the server's whole event log.
 - The client sends `POST` or `PUT` only to paths on its allowlist. The only write on that list is door release (`/api/v2/System/ActivateAppliances`), and it's blocked unless **Allow door control** is on.
 - The integration never calls endpoints that look like reads but change configuration, such as `POST /api/v2/device/states`, or `POST` and `PUT` on users, time constraints, dashboards, or permissions.
-- Tokens, passwords, and hashes are never logged. Diagnostics redact credentials, addresses, serial numbers, the site ID, and user names.
+- Tokens, passwords, and hashes are never logged. Diagnostics redact credentials, addresses, serial numbers, the site ID, user names, and credential names.
 - If the account isn't allowed to read something (HTTP 401, 403, or 405), the integration skips those entities instead of failing.
 
 ## Troubleshooting
@@ -264,8 +264,6 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 | No door events, and the log says the account can't read the event log | The Paxton account lacks the **Reports** permission, which the event log needs. Everything else keeps working without it. Grant the permission in Paxton10, then reload the integration. |
 | No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
 | **Paxton10 is using the fallback route** repair | The main route failed. Check the network path. The repair clears itself once the main route works again. |
-
-For more answers, see the [FAQ](https://github.com/urbozz/paxton10-ha/wiki/FAQ) in the wiki.
 
 Debug logging:
 

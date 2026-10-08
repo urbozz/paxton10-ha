@@ -96,7 +96,8 @@ CREDENTIAL_TYPES: dict[str, str] = {
 
 
 # Event types that mean a controller or panel changed state: they trigger an early read of the
-# device list. From the web app's DMSEventType enum; none seen live yet (a quiet site has none).
+# device list. From the web app's DMSEventType enum. Only 12 has been seen live: Paxton logs it for
+# each door when a controller restarts or is reinstated.
 HARDWARE_EVENT_TYPES = frozenset(
     {
         12, 13, 14,  # serial device online, offline, detected
