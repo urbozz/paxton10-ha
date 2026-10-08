@@ -146,6 +146,7 @@ class PollingSource(UpdateSource):
         self._seen_set: set[str] = set()
         self._baselined = False
         self.auth_failed = False
+        self.events_forbidden = False  # the account can't read the event log (Paxton's Reports permission)
         self.mode = MODE_POLLING  # how events arrive, for diagnostics
         self._door_pushed_at: dict[int, float] = {}  # door id -> when its last live state arrived
 
@@ -200,6 +201,8 @@ class PollingSource(UpdateSource):
             try:
                 await poll()
                 failures = 0
+                if kind == KIND_EVENTS and self.events_forbidden:
+                    return  # nothing to poll; the warning has been logged
             except PaxtonAuthError as err:
                 # Stop both loops. Retrying a rejected password can lock the Paxton account;
                 # the reauth flow reloads the entry with new credentials.
@@ -247,6 +250,9 @@ class PollingSource(UpdateSource):
                 }
         due = _monotonic() - self._devices_read_at >= self._device_full_interval
         if self._site.can_read_devices and (full or due or self._devices_requested or not self._site.can_read_summary):
+            # Consume the request now: one that arrives during the read (a hardware event on the
+            # live feed) must survive it, so the next poll reads the list again.
+            self._devices_requested = False
             try:
                 update.devices = await read_devices(self._conn)
                 name_hardware(update.devices, self._site.doors)
@@ -263,7 +269,6 @@ class PollingSource(UpdateSource):
                 raise
             else:
                 self._devices_read_at = _monotonic()
-            self._devices_requested = False
         if self._callback:
             await self._callback(update)
 
@@ -273,7 +278,20 @@ class PollingSource(UpdateSource):
         self._device_wake.set()
 
     async def poll_events(self) -> None:
-        body = await self._conn.post(EVENTS_PATH, event_filter(self._site.server.utc_offset_minutes))
+        if self.events_forbidden:
+            return
+        try:
+            body = await self._conn.post(EVENTS_PATH, event_filter(self._site.server.utc_offset_minutes))
+        except PaxtonForbidden as err:
+            # Unlike a network error, this won't clear by itself, and the rest of the integration
+            # works without the event log. Say so once, and don't make every entity unavailable.
+            self.events_forbidden = True
+            _LOGGER.warning(
+                "This Paxton account can't read the event log, so there are no door events (%s). "
+                "Give it the Reports permission in Paxton10, then reload the integration",
+                err,
+            )
+            return
         raw = body.get("Result") if isinstance(body, dict) else None
         if not isinstance(raw, list):
             raise PaxtonError("event poll returned no Result list")
@@ -430,13 +448,13 @@ class LiveSource(PollingSource):
             rows = [row for message in messages for row in event_rows(message)]
             if rows:
                 events = self._parse_newest_first(rows)
-                if self._include_user_names and any(_unnamed_user(row) for row in rows):
+                if self._include_user_names and not self.events_forbidden and any(_unnamed_user(row) for row in rows):
                     # Live rows carry the user's id but not their name. The event log row has the
                     # name, so fire from there. Anything not on the page yet still fires below.
                     # A failed lookup only costs the name, so it doesn't make entities unavailable.
                     await self._poll_once(report=False)
                 await self._deliver(events)
-            if _monotonic() - last_reconcile >= RECONCILE_INTERVAL:
+            if not self.events_forbidden and _monotonic() - last_reconcile >= RECONCILE_INTERVAL:
                 await self._poll_once()
                 last_reconcile = _monotonic()
 
@@ -469,6 +487,10 @@ class LiveSource(PollingSource):
         polls = max(1, math.ceil(seconds / self._event_interval))
         for n in range(polls):
             if self.auth_failed:  # the device loop hit a rejected password
+                return
+            if self.events_forbidden:
+                # Nothing to poll. Wait out the rest, so the live feed is retried at the same cadence.
+                await _sleep(max(0.0, seconds - n * self._event_interval))
                 return
             await self._poll_once()
             if n < polls - 1:

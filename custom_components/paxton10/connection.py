@@ -207,10 +207,15 @@ class PaxtonConnection:
                         await self._drop()
                 continue
             except PaxtonError:
-                # Dropped relay or network error. Reconnect on the next call.
+                # Dropped relay or network error. Reconnect on the next call, unless try_primary
+                # swapped the client while this call was in flight: the new one is signed in, so
+                # the call is simply made again on it.
                 async with self._lock:
-                    if self._client is client:
+                    swapped = self._client is not None and self._client is not client
+                    if not swapped:
                         await self._drop()
+                if swapped and attempt == 1:
+                    continue
                 raise
             if resp.status in (403, 405):
                 raise PaxtonForbidden(f"{method} {path}: HTTP {resp.status}")

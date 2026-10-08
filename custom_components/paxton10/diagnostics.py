@@ -38,6 +38,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: Paxton1
         "last_update_success": coordinator.last_update_success,
         "last_event_id": getattr(source, "last_event_id", None),
         "event_source": getattr(source, "mode", None),
+        "event_log_forbidden": getattr(source, "events_forbidden", None),
         "server": async_redact_data(asdict(site.server), TO_REDACT),
         "can_read_devices": site.can_read_devices,
         "can_read_summary": site.can_read_summary,

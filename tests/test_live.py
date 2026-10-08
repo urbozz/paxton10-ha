@@ -964,3 +964,62 @@ async def test_rediscovery_keeps_live_door_states(
     await hass.async_block_till_done()
     assert hass.states.get(lock).state == STATE_ON  # type: ignore[union-attr]
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+# Review (v0.7.2): an account without Paxton's Reports permission can't read the event log.
+
+
+async def test_event_log_forbidden_keeps_the_rest_running(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float], caplog: pytest.LogCaptureFixture
+) -> None:
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.const import STATE_ON
+
+    server.status[EVENTS] = 403
+    entry = await setup(hass)
+    assert entry.state is ConfigEntryState.LOADED
+    src = live(entry)
+    assert src.events_forbidden
+    assert caplog.text.count("can't read the event log") == 1
+    # Nothing is unavailable, and the live feed still runs if the hub allows it.
+    assert hass.states.get("binary_sensor.main_entrance_door_controller_connectivity").state == STATE_ON  # type: ignore[union-attr]
+    await until(lambda: src.mode == MODE_LIVE)
+    fired = capture(hass)
+    hub.pushes.put_nowait([event(101)])
+    await until(lambda: len(fired) == 1, hass)
+    assert entry.runtime_data.last_update_success
+    # Further polls neither log again nor report an error, and the fallback wait is kept.
+    await src._poll_once()
+    await src._poll_for(30)
+    assert caplog.text.count("can't read the event log") == 1
+    assert entry.runtime_data.last_update_success
+    assert 30 in fast_sleep
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert diag["event_log_forbidden"] is True
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_event_log_forbidden_stops_the_polling_loop(
+    hass: HomeAssistant, server: FakeServer, fast_sleep: list[float]
+) -> None:
+    from custom_components.paxton10.source import PollingSource
+
+    entry = await setup(hass)
+    src = live(entry)
+    await src.async_stop()
+    plain = PollingSource(src._conn, src._site, 30, 10, False)
+    errors: list[Any] = []
+
+    async def cb(update: Any) -> None:
+        if update.error:
+            errors.append(update.error)
+
+    server.status[EVENTS] = 403
+    await plain.async_start(cb)
+    try:
+        events_task = plain._tasks[-1]
+        await until(lambda: events_task.done())
+        assert plain.events_forbidden and errors == []
+    finally:
+        await plain.async_stop()
+    await hass.config_entries.async_unload(entry.entry_id)

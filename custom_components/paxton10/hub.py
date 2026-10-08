@@ -148,7 +148,7 @@ class LongPollHub:
             raise PaxtonError(f"hub {path}: reply isn't JSON") from err
 
     async def connect(self) -> None:
-        """Negotiate, connect, and start. Raises PaxtonError, or PaxtonAuthError on a rejected token."""
+        """Negotiate, connect, and start. Raises PaxtonError, or HubUnauthorized on a rejected token."""
         self._reset()
         info = await self._request("GET", "negotiate", self._query())
         token = info.get("ConnectionToken") if isinstance(info, dict) else None

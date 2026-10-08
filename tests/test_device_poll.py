@@ -193,3 +193,25 @@ async def test_failed_list_read_keeps_the_trigger_and_the_cheap_data(
     assert not src._devices_requested
     assert received[-1].kind == "devices" and received[-1].devices
     assert coord.last_update_success
+
+
+async def test_request_during_a_list_read_is_kept(
+    hass: HomeAssistant, server: FakeServer, clock: dict[str, float], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review (v0.7.2): a hardware event during the list read used to be wiped once the read finished."""
+    src = await stopped(hass)
+    real = source_mod.read_devices
+
+    async def read_and_get_asked_again(conn: Any) -> Any:
+        src.request_device_refresh()  # a hardware event lands while this read is in flight
+        return await real(conn)
+
+    monkeypatch.setattr(source_mod, "read_devices", read_and_get_asked_again)
+    before = reads(server, CONTROLLERS)
+    await src.poll_devices(full=True)
+    assert reads(server, CONTROLLERS) == before + 1
+    assert src._devices_requested  # survived the read
+    monkeypatch.setattr(source_mod, "read_devices", real)
+    await src.poll_devices()
+    assert reads(server, CONTROLLERS) == before + 2
+    assert not src._devices_requested

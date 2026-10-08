@@ -243,7 +243,6 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - Connectivity assumes status `1` means online. That held for every device during testing, when the server reported no offline devices. Other values are treated as offline until they're checked against the web UI.
 - The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes, or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller at the 10-minute default (it was about 165 MB a day per controller at 30 seconds), plus a few tens of MB a day for the rest, depending on how busy the doors are.
 - The server isn't discovered automatically. Enter its address yourself.
-- When the integration switches from the fallback route back to the main route, a call already in flight on the fallback connection can fail. The next poll uses the main route.
 
 ## Safety rules
 
@@ -262,6 +261,7 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 | **Can't connect** during setup | For Direct, check that Home Assistant can reach the server on port 443. For Remote, check that remote access is on in Paxton10. |
 | **The username or password is wrong** | Sign in to the Paxton10 web UI with the same account. |
 | Fewer entities than expected | The account may lack permission for devices or the summary. Try an administrator account to compare. |
+| No door events, and the log says the account can't read the event log | The Paxton account lacks the **Reports** permission, which the event log needs. Everything else keeps working without it. Grant the permission in Paxton10, then reload the integration. |
 | No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `last_event_id`. If it stays at `null`, the event poll is failing. Turn on debug logging for `custom_components.paxton10` and look for event poll errors. |
 | **Paxton10 is using the fallback route** repair | The main route failed. Check the network path. The repair clears itself once the main route works again. |
 

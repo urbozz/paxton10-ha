@@ -484,3 +484,28 @@ async def test_intercom_user_only_when_allowed(hass: HomeAssistant, server: Fake
     await source(entry).poll_events()
     await hass.async_block_till_done()
     assert "user_name" not in fired[0].data
+
+
+async def test_issue3_call_in_flight_survives_the_switch_back(hass: HomeAssistant, server: FakeServer) -> None:
+    """Review (v0.7.2): a call in flight when try_primary swapped the client failed, and was reported."""
+    server.down.add("192.0.2.1")
+    entry = await setup(hass, {OPT_FALLBACK: True, OPT_FALLBACK_TARGET: "abc123"})
+    conn = coordinator(entry).conn
+    old = conn._client
+    assert old and conn.active_route == "remote"
+
+    async def swap_then_fail(path: str) -> Any:
+        server.down.clear()
+        assert await conn.try_primary()
+        raise PaxtonError("remote connection closed")
+
+    old.get = swap_then_fail  # type: ignore[method-assign]
+    # The call is made again on the new client instead of failing.
+    assert await conn.get("/api/v1/System/Software/Version") == "4.11.9753.20528"
+    assert conn.active_route == "direct"
+    # A failure with no swap still drops the client and raises, as before.
+    assert conn._client
+    conn._client.get = AsyncMock(side_effect=PaxtonError("down"))  # type: ignore[method-assign]
+    with pytest.raises(PaxtonError, match="down"):
+        await conn.get("/api/v1/System/Software/Version")
+    assert conn._client is None
