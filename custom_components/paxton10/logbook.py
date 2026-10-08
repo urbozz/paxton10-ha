@@ -30,6 +30,9 @@ def async_describe_events(
         if user := data.get("user_name"):
             # The user a call went to, or the user who opened or released the door.
             message += f" {'to' if event_type == 'call_made' else 'by'} {user}"
+        if credential := data.get("credential_name"):
+            # Only there with credential names on. Labelled, because the name is free text.
+            message += f" (credential: {credential})"
         return {
             LOGBOOK_ENTRY_NAME: data.get("door_name") or "Paxton10",
             LOGBOOK_ENTRY_MESSAGE: message,

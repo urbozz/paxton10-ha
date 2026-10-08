@@ -562,3 +562,24 @@ async def test_logbook_lines(hass: HomeAssistant, server: FakeServer) -> None:
         {"name": "Paxton10", "message": "logged opened by software", "entity_id": None},
         {"name": "Main Entrance Door", "message": "logged exit request", "entity_id": door},
     ]
+
+
+async def test_logbook_credential_name(hass: HomeAssistant, server: FakeServer) -> None:
+    """With credential names on, the line names the credential too, labelled as free text."""
+    from custom_components.paxton10.const import OPT_INCLUDE_CREDENTIAL_NAMES
+
+    fired = capture(hass)
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True, OPT_INCLUDE_CREDENTIAL_NAMES: True})
+    fob = event(101, 5, user={"FirstName": "Test", "Surname": "User"})
+    fob["CredentialData"] = {"CredentialId": 22, "Credential": "Replacement fob", "CredentialValue": "12345678"}
+    server.events += [fob, event(102, 6)]
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+
+    describers: dict[tuple[str, str], Any] = {}
+    async_describe_events(hass, lambda domain, event_type, fn: describers.__setitem__((domain, event_type), fn))
+    describe = describers[(DOMAIN, EVENT_PAXTON10)]
+    assert [describe(e)["message"] for e in fired] == [
+        "logged access permitted by Test User (credential: Replacement fob)",
+        "logged exit request",
+    ]

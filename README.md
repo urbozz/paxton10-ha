@@ -166,7 +166,7 @@ The numbers come from the Paxton10 4.11 web app, except the intercom types, whic
 
 Events from before Home Assistant started are never replayed.
 
-Each event also appears in **Logbook**, and in the door's **Activity** on its device page, for example "Front Door logged access permitted by Alex Smith". The user's name appears only when **Include user names in events** is on.
+Each event also appears in **Logbook**, and in the door's **Activity** on its device page, for example "Front Door logged access permitted by Alex Smith (credential: Keyfob 12)". The user's name appears only when **Include user names in events** is on, and the credential's name only when **Include credential names in events** is on.
 
 ## How data updates
 
