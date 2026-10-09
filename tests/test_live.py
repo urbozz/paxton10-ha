@@ -282,6 +282,64 @@ async def test_live_reconciles_with_the_event_log(
     await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_live_feed_reconnects_on_schedule(
+    hass: HomeAssistant,
+    server: FakeServer,
+    hub: FakeHub,
+    fast_sleep: list[float],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Paxton recalculates its summary when a live connection starts, so the feed reconnects on a schedule."""
+    from custom_components.paxton10.const import EVENT_INTERVAL
+
+    caplog.set_level(logging.INFO, logger="custom_components.paxton10.source")
+    clock = {"now": 0.0}
+    monkeypatch.setattr(source_mod, "_monotonic", lambda: clock["now"])
+    entry = await setup(hass)
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    subscriptions, sleeps = hub.subscriptions(), len(fast_sleep)
+    caplog.clear()
+    # Not due yet: a push is handled on the same connection.
+    clock["now"] = source_mod.HUB_REFRESH_DIRECT - 1
+    hub.pushes.put_nowait({"C": "c9", "M": []})
+    await hass.async_block_till_done()
+    assert hub.subscriptions() == subscriptions
+    # Due: it closes the connection and opens a new one straight away.
+    clock["now"] = source_mod.HUB_REFRESH_DIRECT + 1
+    hub.pushes.put_nowait({"C": "c10", "M": []})
+    await until(lambda: hub.subscriptions() == subscriptions + 1)
+    assert "abort" in hub.paths()
+    assert src.mode == MODE_LIVE
+    # A planned reconnect isn't a failure: no backoff wait, and no "fell back to polling" in the log.
+    # (The device loop's own 30 s waits share the fake sleep, so look for the event loop's 10 s or 20 s.)
+    assert not {EVENT_INTERVAL, EVENT_INTERVAL * 2} & set(fast_sleep[sleeps:])
+    assert "unavailable" not in caplog.text
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(("route", "interval"), [("direct", 900), ("remote", 3600)])
+async def test_live_feed_reconnect_interval_per_route(
+    hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float], route: str, interval: int
+) -> None:
+    """Remote reconnects go through Paxton's relay, so they're hourly there."""
+    entry = await setup(hass)
+    src = live(entry)
+    await until(lambda: src.mode == MODE_LIVE)
+    await src.async_stop()
+    src._conn.active_route = route
+    seen: list[float] = []
+
+    async def fake_listen(feed: Any, refresh_after: float) -> None:
+        seen.append(refresh_after)
+
+    src._listen = fake_listen  # type: ignore[method-assign]
+    assert await src._hub_cycle(0) is None
+    assert seen == [interval]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_live_loop_failures(hass: HomeAssistant, server: FakeServer, hub: FakeHub, fast_sleep: list[float]) -> None:
     entry = await setup(hass)
     src = live(entry)

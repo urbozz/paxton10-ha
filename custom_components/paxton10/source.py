@@ -55,6 +55,12 @@ MAX_BACKOFF = 300
 SEEN_EVENT_IDS = 1000  # well over one page, so an event never comes back as new
 EVENTS_PATH = f"/api/v2/Events/?page=0&pageSize={EVENT_PAGE_SIZE}"
 RECONCILE_INTERVAL = 300  # while live, also read the event log this often, in case a push was lost
+# Paxton recalculates its system summary (Active users above all) when a live feed connection starts,
+# and otherwise only now and then. So the live feed reconnects on a schedule. Each reconnect is a few
+# small requests, and the catch-up event log read covers the gap. On Remote they go through Paxton's
+# relay, so less often there.
+HUB_REFRESH_DIRECT = 900
+HUB_REFRESH_REMOTE = 3600
 NOT_DIRECT_RECHECK = 300  # with no live feed on the active route, poll this long before checking again
 _sleep = asyncio.sleep  # tests replace this, not asyncio.sleep itself
 _monotonic = time.monotonic  # and this
@@ -377,7 +383,10 @@ class LiveSource(PollingSource):
         failures = 0
         while not self.auth_failed:
             try:
-                failures = await self._hub_cycle(failures)
+                result = await self._hub_cycle(failures)
+                if result is None:
+                    continue  # a scheduled reconnect: straight back in, no backoff
+                failures = result
                 await self._poll_for(min(self._event_interval * (2 ** min(failures, 6)), MAX_BACKOFF))
             except PaxtonAuthError as err:
                 # A rejected password on sign-in or a poll. Stop, as the polling loops do, and let reauth take over.
@@ -391,14 +400,17 @@ class LiveSource(PollingSource):
                 failures = min(failures + 1, 6)
                 await _sleep(self._event_interval)
 
-    async def _hub_cycle(self, failures: int) -> int:
-        """Connect, subscribe, and listen until the hub fails. Returns the new failure count.
+    async def _hub_cycle(self, failures: int) -> int | None:
+        """Connect, subscribe, and listen until the hub fails or is due a reconnect.
+
+        Returns the new failure count, or None for a scheduled reconnect.
 
         Direct uses the server's long poll, Remote the relay socket. With neither (a transport
         without a hub), poll until it's time to check the route again.
         Raises PaxtonAuthError for a rejected password.
         """
         hub: LiveFeed | None = None
+        refreshed = False
         try:
             hub = await self._open_feed()
             if hub is None:
@@ -412,7 +424,9 @@ class LiveSource(PollingSource):
             await self._poll_once()
             self._set_mode(MODE_LIVE)
             failures = 0
-            await self._listen(hub)
+            remote = self._conn.active_route == ROUTE_REMOTE
+            await self._listen(hub, HUB_REFRESH_REMOTE if remote else HUB_REFRESH_DIRECT)
+            refreshed = True
         except PaxtonAuthError:
             raise
         except HubUnauthorized as err:
@@ -427,6 +441,8 @@ class LiveSource(PollingSource):
         finally:
             if hub:
                 await hub.close()
+        if refreshed:
+            return None
         self._set_mode(MODE_POLLING, "reconnecting")
         return failures + 1
 
@@ -448,10 +464,10 @@ class LiveSource(PollingSource):
         except PaxtonError as err:
             _LOGGER.debug("Paxton10 live door state unavailable, door state is polled instead: %s", err)
 
-    async def _listen(self, hub: LiveFeed) -> None:
-        """Hold the long poll and deliver pushes until the hub fails."""
-        last_reconcile = _monotonic()
-        while True:
+    async def _listen(self, hub: LiveFeed, refresh_after: float) -> None:
+        """Hold the long poll and deliver pushes until the hub fails, or return when it's due a reconnect."""
+        connected = last_reconcile = _monotonic()
+        while _monotonic() - connected < refresh_after:
             messages = await hub.poll()
             states = [row for message in messages for row in door_state_rows(message)]
             if states and (door_states := parse_door_states(states)):
