@@ -20,7 +20,7 @@ from typing import Any
 from .api import PaxtonAuthError, PaxtonError
 from .connection import PaxtonConnection, PaxtonForbidden, PaxtonNotFound
 from .const import (
-    DEFAULT_DEVICE_FULL_INTERVAL,
+    DEVICE_FULL_INTERVAL,
     EVENT_PAGE_SIZE,
     HARDWARE_EVENT_TYPES,
     REMOTE_DEVICE_FULL_INTERVAL,
@@ -132,7 +132,7 @@ class PollingSource(UpdateSource):
         event_interval: float,
         include_user_names: bool,
         include_credential_names: bool = False,
-        device_full_interval: float = DEFAULT_DEVICE_FULL_INTERVAL,
+        device_full_interval: float = DEVICE_FULL_INTERVAL,
     ) -> None:
         self._conn = conn
         self._site = site
@@ -463,8 +463,9 @@ class LiveSource(PollingSource):
             if rows:
                 events = self._parse_newest_first(rows)
                 if self._include_user_names and not self.events_forbidden and any(_unnamed_user(row) for row in rows):
-                    # Live rows carry the user's id but not their name. The event log row has the
-                    # name, so fire from there. Anything not on the page yet still fires below.
+                    # A live row can name the user by id only (on 4.11, software opens do; fob
+                    # events carry the name). The event log row has the name, so fire from there.
+                    # Anything not on the page yet still fires below.
                     # A failed lookup only costs the name, so it doesn't make entities unavailable.
                     await self._poll_once(report=False)
                 await self._deliver(events)

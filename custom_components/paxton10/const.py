@@ -16,23 +16,20 @@ ROUTE_REMOTE = "remote"
 
 # Options
 OPT_ALLOW_DOOR_CONTROL = "allow_door_control"
-OPT_DEVICE_INTERVAL = "device_interval"
-OPT_DEVICE_FULL_INTERVAL = "device_full_interval"
-OPT_EVENT_INTERVAL = "event_interval"
 OPT_FALLBACK = "fallback"
 OPT_FALLBACK_TARGET = "fallback_target"
 OPT_INCLUDE_USER_NAMES = "include_user_names"
 OPT_INCLUDE_CREDENTIAL_NAMES = "include_credential_names"
 
-DEFAULT_DEVICE_INTERVAL = 30
-DEFAULT_DEVICE_FULL_INTERVAL = 600  # the controller list is ~57 KB per controller, so read it sparingly
-MIN_DEVICE_FULL_INTERVAL = 60
+# Fixed intervals. Home Assistant doesn't let users set polling intervals in core integrations, so
+# these aren't options. Removed options are dropped from the entry by async_migrate_entry.
+REMOVED_OPTIONS = ("device_interval", "device_full_interval", "event_interval")
+DEVICE_INTERVAL = 30  # summary and door state
+DEVICE_FULL_INTERVAL = 600  # the controller list is ~57 KB per controller, so read it sparingly
 # On Remote every read goes through Paxton's relay, so the controller list is read at most this often
 # unless something asks for it (a count change or a hardware event).
 REMOTE_DEVICE_FULL_INTERVAL = 1800
-DEFAULT_EVENT_INTERVAL = 10
-MIN_EVENT_INTERVAL = 5
-MIN_DEVICE_INTERVAL = 10
+EVENT_INTERVAL = 10  # event log reads while the live feed is down
 
 EVENT_PAXTON10 = "paxton10_event"
 EVENT_PAGE_SIZE = 50

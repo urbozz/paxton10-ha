@@ -19,9 +19,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -37,17 +34,8 @@ from .const import (
     CONF_ROUTE,
     CONF_TARGET,
     CONF_USERNAME,
-    DEFAULT_DEVICE_FULL_INTERVAL,
-    DEFAULT_DEVICE_INTERVAL,
-    DEFAULT_EVENT_INTERVAL,
     DOMAIN,
-    MIN_DEVICE_FULL_INTERVAL,
-    MIN_DEVICE_INTERVAL,
-    MIN_EVENT_INTERVAL,
     OPT_ALLOW_DOOR_CONTROL,
-    OPT_DEVICE_FULL_INTERVAL,
-    OPT_DEVICE_INTERVAL,
-    OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
     OPT_INCLUDE_CREDENTIAL_NAMES,
@@ -143,6 +131,7 @@ async def _try(
 
 class Paxton10ConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    MINOR_VERSION = 2  # 1.2 dropped the interval options
 
     def __init__(self) -> None:
         self._route = ROUTE_DIRECT
@@ -313,25 +302,6 @@ class Paxton10OptionsFlow(OptionsFlow):
         schema = probatio.Schema(
             {
                 probatio.Required(OPT_ALLOW_DOOR_CONTROL, default=False): BooleanSelector(),
-                probatio.Required(OPT_DEVICE_INTERVAL, default=DEFAULT_DEVICE_INTERVAL): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_DEVICE_INTERVAL, max=3600, step=1, unit_of_measurement="s", mode=NumberSelectorMode.BOX
-                    )
-                ),
-                probatio.Required(OPT_DEVICE_FULL_INTERVAL, default=DEFAULT_DEVICE_FULL_INTERVAL): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_DEVICE_FULL_INTERVAL,
-                        max=86400,
-                        step=1,
-                        unit_of_measurement="s",
-                        mode=NumberSelectorMode.BOX,
-                    )
-                ),
-                probatio.Required(OPT_EVENT_INTERVAL, default=DEFAULT_EVENT_INTERVAL): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_EVENT_INTERVAL, max=3600, step=1, unit_of_measurement="s", mode=NumberSelectorMode.BOX
-                    )
-                ),
                 probatio.Required(OPT_FALLBACK, default=False): BooleanSelector(),
                 probatio.Optional(OPT_FALLBACK_TARGET): str,
                 probatio.Required(OPT_INCLUDE_USER_NAMES, default=False): BooleanSelector(),

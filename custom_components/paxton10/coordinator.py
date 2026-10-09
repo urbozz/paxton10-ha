@@ -25,16 +25,13 @@ from .const import (
     CONF_ROUTE,
     CONF_TARGET,
     CONF_USERNAME,
-    DEFAULT_DEVICE_FULL_INTERVAL,
-    DEFAULT_DEVICE_INTERVAL,
-    DEFAULT_EVENT_INTERVAL,
+    DEVICE_FULL_INTERVAL,
+    DEVICE_INTERVAL,
     DOMAIN,
+    EVENT_INTERVAL,
     EVENT_PAXTON10,
     MANUFACTURER,
     OPT_ALLOW_DOOR_CONTROL,
-    OPT_DEVICE_FULL_INTERVAL,
-    OPT_DEVICE_INTERVAL,
-    OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
     OPT_INCLUDE_CREDENTIAL_NAMES,
@@ -58,9 +55,6 @@ ForgetListener = Callable[[int], None]
 @dataclass(frozen=True)
 class EntryOptions:
     allow_door_control: bool
-    device_interval: int
-    device_full_interval: int
-    event_interval: int
     fallback_target: str | None
     include_user_names: bool
     include_credential_names: bool
@@ -70,9 +64,6 @@ class EntryOptions:
         o = entry.options
         return cls(
             allow_door_control=bool(o.get(OPT_ALLOW_DOOR_CONTROL, False)),
-            device_interval=int(o.get(OPT_DEVICE_INTERVAL, DEFAULT_DEVICE_INTERVAL)),
-            device_full_interval=int(o.get(OPT_DEVICE_FULL_INTERVAL, DEFAULT_DEVICE_FULL_INTERVAL)),
-            event_interval=int(o.get(OPT_EVENT_INTERVAL, DEFAULT_EVENT_INTERVAL)),
             fallback_target=(o.get(OPT_FALLBACK_TARGET) or None) if o.get(OPT_FALLBACK) else None,
             include_user_names=bool(o.get(OPT_INCLUDE_USER_NAMES, False)),
             include_credential_names=bool(o.get(OPT_INCLUDE_CREDENTIAL_NAMES, False)),
@@ -179,11 +170,11 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
         self.source = LiveSource(
             self.conn,
             self.data,
-            self.options.device_interval,
-            self.options.event_interval,
+            DEVICE_INTERVAL,
+            EVENT_INTERVAL,
             self.options.include_user_names,
             self.options.include_credential_names,
-            self.options.device_full_interval,
+            DEVICE_FULL_INTERVAL,
         )
         try:
             await self.source.async_start(self._async_handle_update)

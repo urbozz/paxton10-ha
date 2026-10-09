@@ -19,8 +19,6 @@ from custom_components.paxton10.const import (
     CONF_USERNAME,
     DOMAIN,
     OPT_ALLOW_DOOR_CONTROL,
-    OPT_DEVICE_INTERVAL,
-    OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
     OPT_INCLUDE_USER_NAMES,
@@ -241,8 +239,6 @@ async def test_options(hass: HomeAssistant, server: FakeServer) -> None:
 
     options = {
         OPT_ALLOW_DOOR_CONTROL: True,
-        OPT_DEVICE_INTERVAL: 60,
-        OPT_EVENT_INTERVAL: 5,
         OPT_FALLBACK: True,
         OPT_INCLUDE_USER_NAMES: False,
         "include_credential_names": True,
@@ -258,5 +254,33 @@ async def test_options(hass: HomeAssistant, server: FakeServer) -> None:
     assert entry.options[OPT_ALLOW_DOOR_CONTROL] is True
     assert entry.options[OPT_FALLBACK_TARGET] == "abc123"
     assert entry.options["include_credential_names"] is True
+    # The intervals are fixed, so the form doesn't offer them.
+    assert not {"device_interval", "device_full_interval", "event_interval"} & set(entry.options)
     # The entry reloaded with door control on, so the buttons exist now.
     assert entity_id(hass, "button", 2001, "open") is not None
+
+
+async def test_interval_options_migrated_away(hass: HomeAssistant, server: FakeServer) -> None:
+    """Entries from before 1.2 kept three interval options. The intervals are fixed now, so they're dropped."""
+    entry = make_entry(
+        {OPT_ALLOW_DOOR_CONTROL: True, "device_interval": 300, "device_full_interval": 120, "event_interval": 5}
+    )
+    entry.add_to_hass(hass)
+    assert entry.minor_version == 1
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.minor_version == 2
+    assert entry.options == {OPT_ALLOW_DOOR_CONTROL: True}
+    source = entry.runtime_data.source
+    assert source._device_interval == 30 and source._device_full_interval == 600 and source._event_interval == 10
+
+
+async def test_newer_entry_version_refused(hass: HomeAssistant, server: FakeServer) -> None:
+    """An entry from a newer major version can't be migrated down, so it doesn't load."""
+    from homeassistant.config_entries import ConfigEntryState
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, version=2)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR

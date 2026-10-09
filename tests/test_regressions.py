@@ -24,8 +24,6 @@ from custom_components.paxton10.const import (
     DOMAIN,
     EVENT_PAXTON10,
     OPT_ALLOW_DOOR_CONTROL,
-    OPT_DEVICE_INTERVAL,
-    OPT_EVENT_INTERVAL,
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
     OPT_INCLUDE_USER_NAMES,
@@ -298,8 +296,6 @@ async def test_issue8_fallback_target_trimmed(
         result["flow_id"],
         {
             OPT_ALLOW_DOOR_CONTROL: False,
-            OPT_DEVICE_INTERVAL: 30,
-            OPT_EVENT_INTERVAL: 10,
             OPT_FALLBACK: fallback,
             OPT_FALLBACK_TARGET: " abc123 ",
             OPT_INCLUDE_USER_NAMES: False,

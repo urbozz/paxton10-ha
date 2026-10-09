@@ -10,8 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from custom_components.paxton10 import source as source_mod
 from custom_components.paxton10.const import (
-    DEFAULT_DEVICE_FULL_INTERVAL,
-    OPT_DEVICE_FULL_INTERVAL,
+    DEVICE_FULL_INTERVAL,
 )
 from custom_components.paxton10.source import PollingSource
 
@@ -45,13 +44,13 @@ async def test_cheap_poll_skips_the_controller_list(
     hass: HomeAssistant, server: FakeServer, clock: dict[str, float]
 ) -> None:
     src = await stopped(hass)
-    assert src._device_full_interval == DEFAULT_DEVICE_FULL_INTERVAL
+    assert src._device_full_interval == DEVICE_FULL_INTERVAL
     before, summaries = reads(server, CONTROLLERS), reads(server, SUMMARY)
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before  # nothing changed, not due
     assert reads(server, SUMMARY) == summaries + 1
     # Once the full refresh interval has passed, the list is read again.
-    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    clock["t"] += DEVICE_FULL_INTERVAL
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before + 1
     await src.poll_devices()
@@ -109,11 +108,6 @@ async def test_without_the_summary_every_poll_reads_the_list(
     await src.poll_devices()
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before + 2
-
-
-async def test_full_interval_option(hass: HomeAssistant, server: FakeServer) -> None:
-    src = await stopped(hass, {OPT_DEVICE_FULL_INTERVAL: 120})
-    assert src._device_full_interval == 120
 
 
 async def test_nap_wakes_early(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -222,12 +216,12 @@ async def test_rediscovery_counts_as_a_full_read(
 ) -> None:
     """The hourly layout check reads the controller list, so the poll doesn't read it again straight after."""
     src = await stopped(hass)
-    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    clock["t"] += DEVICE_FULL_INTERVAL
     src.set_site(src._site)
     before = reads(server, CONTROLLERS)
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before
-    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    clock["t"] += DEVICE_FULL_INTERVAL
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before + 1
 
@@ -244,10 +238,10 @@ async def test_remote_reads_the_list_less_often(
     src = await stopped(hass)
     src._conn.active_route = ROUTE_REMOTE
     before = reads(server, CONTROLLERS)
-    clock["t"] += DEFAULT_DEVICE_FULL_INTERVAL
+    clock["t"] += DEVICE_FULL_INTERVAL
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before
-    clock["t"] += REMOTE_DEVICE_FULL_INTERVAL - DEFAULT_DEVICE_FULL_INTERVAL
+    clock["t"] += REMOTE_DEVICE_FULL_INTERVAL - DEVICE_FULL_INTERVAL
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before + 1
     # A hardware event still reads it at once.
