@@ -13,6 +13,13 @@ from homeassistant.core import Event, HomeAssistant, callback
 
 from .const import DOMAIN, EVENT_PAXTON10, EVENT_TYPE_OTHER
 
+# Sign-ins to the Paxton10 software read better as what happened than as the type name.
+OPERATOR_PHRASES = {
+    "operator_logged_on": "a sign-in",
+    "operator_logged_off": "a sign-out",
+    "operator_logged_on_remotely": "a remote sign-in",
+}
+
 
 @callback
 def async_describe_events(
@@ -25,6 +32,8 @@ def async_describe_events(
         event_type = data.get("event_type") or EVENT_TYPE_OTHER
         if event_type == EVENT_TYPE_OTHER:
             message = f"logged Paxton event type {data.get('event_type_id')}"
+        elif event_type in OPERATOR_PHRASES:
+            message = f"logged {OPERATOR_PHRASES[event_type]}"
         else:
             message = f"logged {event_type.replace('_', ' ')}"
         if user := data.get("user_name"):

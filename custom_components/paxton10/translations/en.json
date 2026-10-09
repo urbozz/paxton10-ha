@@ -188,6 +188,9 @@
               "intercom_not_unlocked": "Not unlocked by intercom",
               "call_not_answered": "Call not answered",
               "call_made": "Call made",
+              "operator_logged_on": "Operator logged on",
+              "operator_logged_off": "Operator logged off",
+              "operator_logged_on_remotely": "Operator logged on remotely",
               "other": "Other"
             }
           }

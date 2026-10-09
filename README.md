@@ -161,8 +161,13 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `left_open` | 10 | The door was left open. |
 | `closed` | 11 | The door closed. |
 | `forced` | 16 | The door was forced open. |
+| `operator_logged_on` | 700 | Someone signed in to the Paxton10 software, including the integration itself when it starts or its sign-in token is renewed. Not about a door. |
+| `operator_logged_off` | 701 | Someone signed out of the Paxton10 software. Not about a door. |
+| `operator_logged_on_remotely` | 708 | Someone signed in to the Paxton10 software through remote access. Not about a door. |
 
-The numbers come from the Paxton10 4.11 web app, except the intercom types, which were read from a live event log. Types 2, 3, 4, 8 to 11, 16, 17, and 18 haven't been seen live yet, so their descriptions follow the web app's names for them.
+The numbers come from the Paxton10 4.11 web app, except the intercom types, which were read from a live event log. Types 2, 3, 4, 8 to 11, 16, 17, 18, 701, and 708 haven't been seen live yet, so their descriptions follow the web app's names for them.
+
+Events that aren't about a door, such as the sign-in types, fire `paxton10_event` with `entity_id` and `device_id` set to `null`, and don't trigger a door's event entity. They still appear in **Logbook**, for example "Paxton10 logged a sign-in by Alex Smith".
 
 Events from before Home Assistant started are never replayed.
 

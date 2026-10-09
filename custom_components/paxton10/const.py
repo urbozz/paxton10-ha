@@ -60,6 +60,10 @@ EVENT_TYPES: dict[int, str] = {
     141: "intercom_not_unlocked",  # "Door not unlocked by <user>": the called user declined (live 4.11 export)
     142: "call_not_answered",  # "Call not answered by <user>"
     145: "call_made",  # "Call made from <panel> to <user>"
+    # Paxton10 software sign-ins. Not about a door, so they have no door entity. 700 seen live on 4.11.
+    700: "operator_logged_on",  # operatorLogon
+    701: "operator_logged_off",  # operatorLogoff
+    708: "operator_logged_on_remotely",  # operatorLogonRemotely
 }
 # TranslatableFields parameter values on access events: "[Entry reader]" and "[Exit reader]".
 READERS: dict[int, str] = {541134: "entry", 541135: "exit"}

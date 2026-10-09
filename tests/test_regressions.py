@@ -469,6 +469,33 @@ async def test_intercom_events_name_the_called_user(hass: HomeAssistant, server:
     ]
 
 
+async def test_operator_sign_ins_are_named(hass: HomeAssistant, server: FakeServer) -> None:
+    """Paxton logs each software sign-in (700), sign-out (701), and remote sign-in (708). No door is involved."""
+    fired = capture(hass)
+    entry = await setup(hass, {OPT_INCLUDE_USER_NAMES: True})
+    sign_in = {"FirstName": "Alex", "Surname": "Smith"}
+    server.events += [
+        event(101, 700, door=None, user=sign_in),
+        event(102, 701, door=None, user=sign_in),
+        event(103, 708, door=None, user=sign_in),
+    ]
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+    assert [(e.data["event_type"], e.data["entity_id"]) for e in fired] == [
+        ("operator_logged_on", None),
+        ("operator_logged_off", None),
+        ("operator_logged_on_remotely", None),
+    ]
+    describers: dict[tuple[str, str], Any] = {}
+    async_describe_events(hass, lambda domain, event_type, fn: describers.__setitem__((domain, event_type), fn))
+    describe = describers[(DOMAIN, EVENT_PAXTON10)]
+    assert [(describe(e)["name"], describe(e)["message"]) for e in fired] == [
+        ("Paxton10", "logged a sign-in by Alex Smith"),
+        ("Paxton10", "logged a sign-out by Alex Smith"),
+        ("Paxton10", "logged a remote sign-in by Alex Smith"),
+    ]
+
+
 async def test_intercom_user_only_when_allowed(hass: HomeAssistant, server: FakeServer) -> None:
     entry = await setup(hass)
     fired = capture(hass)
