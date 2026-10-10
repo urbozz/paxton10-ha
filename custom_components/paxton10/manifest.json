@@ -7,7 +7,7 @@
   "config_flow": true,
   "documentation": "https://github.com/urbozz/paxton10-ha",
   "integration_type": "hub",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/urbozz/paxton10-ha/issues",
   "requirements": [],
   "version": "0.7.9"
