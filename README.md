@@ -73,6 +73,31 @@ Paxton10 controls what an account can do with two kinds of permission. Building 
 
 The integration never changes Paxton's configuration, so it doesn't need Full permission.
 
+### A login that sees only one person's activity
+
+Each user can have their own Home Assistant, signed in with their own Paxton account, that shows only their own door events. Paxton10 4.11 filters events by the person's software permission, both in the event log and on the live feed.
+
+Paxton's software permissions select groups of people, not individuals. So first, add the person to a group of their own: a person can belong to several groups, and the new group doesn't change their door access unless you add it to a building permission.
+
+Then create a software permission for them, apply it to their own person record, and give it these software elements:
+
+| Software element | Read | Events | Why |
+|---|---|---|---|
+| Reports | Yes | | The event log. |
+| Devices, or the device groups the person uses | Yes | | The doors, their names and state, and opening them. Without Read, the person's events show only a reader's serial number. |
+| The device groups the person uses | | Yes | Adds which door each of their events happened at. It doesn't add other people's events. |
+| People: the person's own group | | Yes | Their events, and no one else's. |
+
+Leave everything else unticked, including Software events and Hardware events.
+
+With this set-up, tested on 4.11:
+
+- Door events, from the event log and the live feed, are only that person's own, including their opens from software. Other people's events, exit button presses, and intercom calls don't appear.
+- The Lock sensors still show every unlock and relock of the doors the account can see, without saying who. A door's real lock state isn't personal data.
+- **Open** works on the doors the person's building permissions allow.
+- The server's summary sensors (Active users and the others) are site-wide figures.
+- Each of the integration's sign-ins appears in Paxton's event log under that person's name.
+
 ## Options
 
 Open the integration and click **Configure**.
