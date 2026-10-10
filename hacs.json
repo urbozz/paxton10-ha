@@ -1,6 +1,6 @@
 {
   "name": "Paxton10",
-  "homeassistant": "2026.10.0b0",
+  "homeassistant": "2026.10.0",
   "hide_default_branch": true,
   "zip_release": true,
   "filename": "paxton10.zip"

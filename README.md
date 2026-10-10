@@ -8,7 +8,7 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 ## Prerequisites
 
-- Home Assistant 2026.10 or later, including the 2026.10 betas.
+- Home Assistant 2026.10.0 or later.
 - A network path from Home Assistant to the Paxton10 server (Direct), or Paxton remote access turned on for the site (Remote).
 - A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs: see [Paxton account permissions](#paxton-account-permissions).
 
@@ -161,7 +161,7 @@ The integration fires a `paxton10_event` event on the Home Assistant event bus f
 | `left_open` | 10 | The door was left open. |
 | `closed` | 11 | The door closed. |
 | `forced` | 16 | The door was forced open. |
-| `operator_logged_on` | 700 | Someone signed in to the Paxton10 software, including the integration itself when it starts or its sign-in token is renewed. Not about a door. |
+| `operator_logged_on` | 700 | Someone signed in to the Paxton10 software, including the integration itself when it renews its sign-in token, about every 12 hours. Its sign-in at start-up doesn't fire, because it happens before the integration starts listening. Not about a door. |
 | `operator_logged_off` | 701 | Someone signed out of the Paxton10 software. Not about a door. |
 | `operator_logged_on_remotely` | 708 | Someone signed in to the Paxton10 software through remote access. Not about a door. |
 
@@ -261,8 +261,8 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
 - Controller status and the summary are polled, not pushed. Paxton accepts the live feed's controller status and battery subscriptions but sent nothing during a live controller restart and reinstate, so the integration doesn't use them. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list. Only type 12, which Paxton logs when a controller restarts or is reinstated, has been seen on a live site.
 - The Connectivity mapping comes from the Paxton10 web app's status list. Online and refreshing have been seen live. Offline, on battery, updating, rebooting, and reinstating haven't yet.
-- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes (30 on Remote), or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller on Direct at the 10-minute default, and about 3 MB a day per controller on Remote. It was about 165 MB a day per controller at 30 seconds. The rest adds about 25 MB a day, depending on how busy the doors are. On Remote, all of it goes through Paxton's relay, which Paxton doesn't support for this use and could limit.
-- **Active users** can be hours out of date. Paxton resets it at midnight UTC, and recalculates it only when a new session starts: when someone signs in to the Paxton10 web app, or when Home Assistant starts or reloads the integration. It doesn't change each time someone uses a credential, and reading it more often doesn't help. Signing in again on a schedule would refresh it, but every sign-in adds an "operator logged on" entry to Paxton's event log, so the integration doesn't. Use door events for anything that needs to be timely. The offline device count comes from the same summary, but a controller that goes offline or restarts also logs a hardware event, which triggers a controller read straight away.
+- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes (30 on Remote), or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller on Direct, and about 3 MB a day per controller on Remote. Before version 0.7.0, which read it every 30 seconds, it was about 165 MB a day per controller. The rest adds about 25 MB a day, depending on how busy the doors are. On Remote, all of it goes through Paxton's relay, which Paxton doesn't support for this use and could limit.
+- **Active users** can be hours out of date. Paxton resets it at midnight UTC, and recalculates it only when a new session starts: when someone signs in to the Paxton10 web app, or when Home Assistant starts or reloads the integration. It doesn't change each time someone uses a credential, and reading it more often doesn't help. Signing in again on a schedule would refresh it, but every sign-in adds an "operator logged on" entry to Paxton's event log, so the integration doesn't. Use door events for anything that needs to be timely. The offline device count comes from the same summary. A controller that restarts or is reinstated also logs a hardware event, which triggers a controller read straight away; going offline is expected to as well, but that hasn't been seen on a live site yet.
 - Lists are read 100 items at a time, and only the first 100 are read: the controllers, the entry panels, and each group in the device tree. A site with more than 100 of any of these would be missing the rest. The largest site tested has 13 doors.
 - The server isn't discovered automatically. Enter its address yourself.
 
@@ -320,6 +320,12 @@ uv venv -p 3.14 .venv && uv pip install -p .venv/bin/python -r requirements_test
 ```bash
 .venv/bin/mypy --strict custom_components/paxton10
 ```
+
+```bash
+.venv/bin/ruff check .
+```
+
+CI runs the same checks: ruff, mypy, and the tests, plus Home Assistant's hassfest and the HACS validation.
 
 Before a release, test on a real system: add the integration over Direct and then over Remote, confirm the entities, and test door release on one door with someone watching it.
 

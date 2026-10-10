@@ -1,4 +1,4 @@
-pytest-homeassistant-custom-component==0.13.370
+pytest-homeassistant-custom-component==0.13.371
 # Pinned: a new ruff release once changed its default rules and broke CI. Bump on purpose.
 mypy==2.4.0
 ruff==0.16.10
