@@ -35,7 +35,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: Paxton10ConfigEntry) -> 
     coordinator.register_server_device()
     coordinator.remove_stale_devices(coordinator.data)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     async def _async_stop(_event: Event) -> None:
         await coordinator.async_stop_updates()
@@ -49,11 +48,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: Paxton10ConfigEntry) ->
     if unloaded:
         await entry.runtime_data.async_shutdown()
     return unloaded
-
-
-async def _async_options_updated(hass: HomeAssistant, entry: Paxton10ConfigEntry) -> None:
-    # Door control and intervals change the client and the source, so start again.
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_remove_config_entry_device(

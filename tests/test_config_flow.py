@@ -284,3 +284,13 @@ async def test_newer_entry_version_refused(hass: HomeAssistant, server: FakeServ
     hass.config_entries.async_update_entry(entry, version=2)
     assert not await hass.config_entries.async_setup(entry.entry_id)
     assert entry.state is ConfigEntryState.MIGRATION_ERROR
+
+
+async def test_no_update_listener(hass: HomeAssistant, server: FakeServer) -> None:
+    """Options reload through OptionsFlowWithReload. An update listener as well would make Home Assistant's
+    own reload after reauth or reconfigure a second one, which it reports and stops supporting in 2026.12."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.update_listeners == []

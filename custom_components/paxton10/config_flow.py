@@ -12,7 +12,7 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_PASSWORD
 from homeassistant.core import HomeAssistant, callback
@@ -284,7 +284,7 @@ class Paxton10ConfigFlow(ConfigFlow, domain=DOMAIN):
     async_step_reconfigure_server_remote = async_step_reconfigure_server
 
 
-class Paxton10OptionsFlow(OptionsFlow):
+class Paxton10OptionsFlow(OptionsFlowWithReload):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         other = ROUTE_REMOTE if self.config_entry.data[CONF_ROUTE] == ROUTE_DIRECT else ROUTE_DIRECT
