@@ -112,6 +112,17 @@ async def run(args: argparse.Namespace) -> int:
         if ok:
             print(f"Newest event id: {max(p.event_id for p in ok)}")
             print(f"Event type ids: {dict(Counter(p.event_type_id for p in ok).most_common())}")
+        # Whose events and which doors the account can see, by Paxton's numeric ids only (no names).
+        users = Counter(
+            r["UserData"]["UserId"] if isinstance(r.get("UserData"), dict) and isinstance(r["UserData"].get("UserId"), int)
+            else "no user"
+            for r in rows if isinstance(r, dict)
+        )
+        doors = Counter(p.door_ids[0] if p.door_ids else "no door" for p in ok)
+        print(f"Users on this page: {len(users) - ('no user' in users)} different user ids. Rows per user id: {dict(users.most_common())}")
+        print(f"Doors on this page: {len(doors) - ('no door' in doors)} different doors. Rows per door id: {dict(doors.most_common())}")
+        report["rows_per_user_id"] = {str(k): v for k, v in users.items()}
+        report["rows_per_door_id"] = {str(k): v for k, v in doors.items()}
         report["rows"] = len(rows)
         report["parsed"] = len(ok)
         report["sample_rows"] = [shape(r) for r in rows[:5]]
