@@ -10,7 +10,7 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 - Home Assistant 2026.10.0 or later.
 - A network path from Home Assistant to the Paxton10 server (Direct), or Paxton remote access turned on for the site (Remote).
-- A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs: see [Paxton account permissions](#paxton-account-permissions).
+- A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs, using **Reconfigure**: see [Paxton account permissions](#paxton-account-permissions).
 
 ## Install
 
@@ -58,7 +58,7 @@ Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in exp
 | Allow door control | See [Options](#options). |
 | Include user names in events | See [Options](#options). |
 
-To change the connection later, open the integration and click **Reconfigure**. Reconfigure refuses a server that belongs to a different site. If the password changes, Home Assistant asks you to sign in again.
+To change the connection or the Paxton account later, open the integration and click **Reconfigure**. You can switch to another account on the same site without deleting the integration, so entity names, areas, and dashboards are kept. Enter the new account's password; to change only the address, leave the password blank to keep the current one. Reconfigure refuses a server that belongs to a different site. If the password changes, Home Assistant asks you to sign in again.
 
 ## Paxton account permissions
 
@@ -79,7 +79,7 @@ Each user can have their own Home Assistant, signed in with their own Paxton acc
 
 Paxton's software permissions select groups of people, not individuals. So first, add the person to a group of their own: a person can belong to several groups, and the new group doesn't change their door access unless you add it to a building permission.
 
-Then create a software permission for them, apply it to their own person record, and give it these software elements:
+Then create a software permission for them, apply it to their own person record, and give it these software elements. To move an existing installation to that person's account, use **Reconfigure**.
 
 | Software element | Read | Events | Why |
 |---|---|---|---|

@@ -81,7 +81,9 @@ def normalize_target(route: str, raw: str) -> str:
     return host
 
 
-def server_schema(route: str, defaults: Mapping[str, Any], with_account: bool = True) -> probatio.Schema:
+def server_schema(
+    route: str, defaults: Mapping[str, Any], with_account: bool = True, password_optional: bool = False
+) -> probatio.Schema:
     fields: dict[Any, Any] = {
         # No default address: every site's server is different.
         probatio.Required(CONF_TARGET, default=defaults.get(CONF_TARGET) or probatio.UNDEFINED): str,
@@ -90,7 +92,8 @@ def server_schema(route: str, defaults: Mapping[str, Any], with_account: bool = 
         fields[probatio.Required(CONF_USERNAME, default=defaults.get(CONF_USERNAME) or probatio.UNDEFINED)] = (
             EMAIL_SELECTOR
         )
-        fields[probatio.Required(CONF_PASSWORD)] = PASSWORD_SELECTOR
+        password = probatio.Optional(CONF_PASSWORD) if password_optional else probatio.Required(CONF_PASSWORD)
+        fields[password] = PASSWORD_SELECTOR
     return probatio.Schema(fields)
 
 
@@ -262,20 +265,38 @@ class Paxton10ConfigFlow(ConfigFlow, domain=DOMAIN):
         placeholders: dict[str, str] = {}
         if user_input is not None:
             target = normalize_target(self._route, user_input[CONF_TARGET])
-            site, errors, placeholders = await _try(
-                self.hass, self._route, target, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD_HASH]
-            )
-            if site:
-                await self.async_set_unique_id(site.server.site_id)
-                self._abort_if_unique_id_mismatch(reason="wrong_site")
-                return self.async_update_reload_and_abort(
-                    entry, data_updates={CONF_ROUTE: self._route, CONF_TARGET: target}
-                )
+            username = user_input[CONF_USERNAME].strip()
+            password = user_input.get(CONF_PASSWORD) or ""
+            # A blank password keeps the stored one, but only for the same account.
+            if password:
+                pw_hash = password_hash(password)
+            elif username.lower() == entry.data[CONF_USERNAME].lower():
+                pw_hash = entry.data[CONF_PASSWORD_HASH]
+            else:
+                errors[CONF_PASSWORD] = "password_required"
+            if not errors:
+                site, errors, placeholders = await _try(self.hass, self._route, target, username, pw_hash)
+                if site:
+                    await self.async_set_unique_id(site.server.site_id)
+                    self._abort_if_unique_id_mismatch(reason="wrong_site")
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data_updates={
+                            CONF_ROUTE: self._route,
+                            CONF_TARGET: target,
+                            CONF_USERNAME: username,
+                            CONF_PASSWORD_HASH: pw_hash,
+                        },
+                    )
         same_route = entry.data[CONF_ROUTE] == self._route
-        defaults = user_input or ({CONF_TARGET: entry.data[CONF_TARGET]} if same_route else {})
+        defaults = {CONF_USERNAME: entry.data[CONF_USERNAME]}
+        if user_input:
+            defaults.update({k: v for k, v in user_input.items() if k != CONF_PASSWORD})
+        elif same_route:
+            defaults[CONF_TARGET] = entry.data[CONF_TARGET]
         return self.async_show_form(
             step_id=f"reconfigure_server_{self._route}",
-            data_schema=server_schema(self._route, defaults, with_account=False),
+            data_schema=server_schema(self._route, defaults, password_optional=True),
             errors=errors,
             description_placeholders=placeholders,
         )

@@ -227,6 +227,55 @@ async def test_reconfigure_wrong_site(hass: HomeAssistant, server: FakeServer) -
     assert result["reason"] == "wrong_site"
 
 
+async def test_reconfigure_switches_account(hass: HomeAssistant, server: FakeServer) -> None:
+    """Reconfigure can move the integration to another account on the same site, keeping its entities."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_ROUTE: ROUTE_DIRECT})
+    assert result["step_id"] == "reconfigure_server_direct"
+    # The form offers the current account, so the address alone can still be changed.
+    schema = {str(k): k for k in result["data_schema"].schema}
+    assert schema[CONF_USERNAME].default() == USERNAME
+
+    # A new account needs its password.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TARGET: "192.0.2.1", CONF_USERNAME: "user@example.com"}
+    )
+    assert result["errors"] == {CONF_PASSWORD: "password_required"}
+
+    # A wrong password is refused before anything is saved.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TARGET: "192.0.2.1", CONF_USERNAME: "user@example.com", CONF_PASSWORD: "wrong"}
+    )
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert entry.data[CONF_USERNAME] == USERNAME
+
+    server.password_hash = password_hash("their-password")
+    with patch("custom_components.paxton10.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_TARGET: "192.0.2.1", CONF_USERNAME: " user@example.com ", CONF_PASSWORD: "their-password"},
+        )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_USERNAME] == "user@example.com"
+    assert entry.data[CONF_PASSWORD_HASH] == password_hash("their-password")
+
+
+async def test_reconfigure_keeps_password_for_same_account(hass: HomeAssistant, server: FakeServer) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_ROUTE: ROUTE_DIRECT})
+    with patch("custom_components.paxton10.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_TARGET: "192.0.2.7", CONF_USERNAME: USERNAME.upper()}
+        )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_TARGET] == "192.0.2.7"
+    assert entry.data[CONF_PASSWORD_HASH] == password_hash(PASSWORD)
+
+
 async def test_options(hass: HomeAssistant, server: FakeServer) -> None:
     entry = make_entry()
     entry.add_to_hass(hass)

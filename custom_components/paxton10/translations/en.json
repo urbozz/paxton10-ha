@@ -62,7 +62,7 @@
         }
       },
       "reconfigure": {
-        "title": "Change connection",
+        "title": "Change connection or account",
         "data": {
           "route": "Connection"
         },
@@ -71,21 +71,29 @@
         }
       },
       "reconfigure_server_direct": {
-        "title": "Server address",
+        "title": "Server and account",
         "data": {
-          "target": "Server address"
+          "target": "Server address",
+          "username": "Username",
+          "password": "Password"
         },
         "data_description": {
-          "target": "The server's IP address or host name. Home Assistant must be able to reach it on port 443."
+          "target": "The server's IP address or host name. Home Assistant must be able to reach it on port 443.",
+          "username": "The email address of the Paxton10 account. Change it to switch this integration to another account on the same site.",
+          "password": "Leave it blank to keep the current password. Required when you change the username."
         }
       },
       "reconfigure_server_remote": {
-        "title": "Remote ID",
+        "title": "Remote ID and account",
         "data": {
-          "target": "Remote ID"
+          "target": "Remote ID",
+          "username": "Username",
+          "password": "Password"
         },
         "data_description": {
-          "target": "The ID from the site's remote access address. You can paste the whole address."
+          "target": "The ID from the site's remote access address. You can paste the whole address.",
+          "username": "The email address of the Paxton10 account. Change it to switch this integration to another account on the same site.",
+          "password": "Leave it blank to keep the current password. Required when you change the username."
         }
       }
     },
@@ -94,7 +102,8 @@
       "cannot_connect": "Can't connect to the Paxton10 server: {error}",
       "invalid_direct_target": "Enter the server's IP address or host name.",
       "invalid_remote_target": "Enter the remote ID, for example abc123.",
-      "unknown": "Unexpected error. Check the Home Assistant log."
+      "unknown": "Unexpected error. Check the Home Assistant log.",
+      "password_required": "Enter the password for the new account."
     },
     "abort": {
       "already_configured": "This Paxton10 site is already set up.",
