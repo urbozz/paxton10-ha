@@ -2,7 +2,7 @@
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=urbozz&repository=paxton10-ha&category=integration)
 
-This custom integration connects Home Assistant to a Paxton10 access control server. It shows the status of the door controllers and entry panels, fires an event for each door event in the Paxton log, and, if you turn it on, adds an **Open** button for each door, gate, and barrier.
+This custom integration connects Home Assistant to a Paxton10 access control server. It shows each door's lock state, fires an event for each door event in the Paxton log, can show the status of the door controllers and entry panels, and, if you turn it on, adds an **Open** button for each door, gate, and barrier.
 
 It uses the Paxton10 web app's internal API. Paxton doesn't document or support that API, so a Paxton software upgrade can break the integration. It was built against Paxton10 4.11 SR1 (`4.11.9753.20528`).
 
@@ -210,7 +210,7 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 - **Door lock state:** live on the same feed, and also read every 30 seconds. A poll never overwrites a newer live update.
 - **Summary:** every 30 seconds. The figures are Paxton's own, and Paxton doesn't always keep them up to date: see [Known limitations](#known-limitations).
 - **Controllers and entry panels** (connectivity, status, battery, power supply, firmware), only with **Include controllers and entry panels** on: the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (such as a restart, a reinstate, going offline or online, a power failure, or a low battery), and otherwise every 10 minutes (30 minutes on Remote). The hourly layout check reads the list too, and counts as one of these reads. A restart or reinstate shows within about a second, through its hardware event. Going offline should log a hardware event too, but that hasn't been seen on a live site yet; failing that, it shows once Paxton's offline device count changes, or at the next controller read. A change that moves neither count and logs no event, such as a firmware version, can take up to 10 minutes (30 on Remote) to show.
-- **Layout:** every hour, the integration reads the device tree and the controller list again. It adds new doors and devices, and removes devices that are no longer on the server.
+- **Layout:** every hour, the integration reads the device tree again, and the controller list if **Include controllers and entry panels** is on. It adds new doors and devices, and removes devices that are no longer on the server.
 
 If the device read or an event log read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
 
@@ -274,9 +274,9 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 
 ## Use cases
 
-- Alerts for forced doors, doors left open, and offline controllers.
+- Alerts for forced doors, doors left open, and, with **Include controllers and entry panels** on, offline controllers.
 - Releasing the gate for a visitor or a delivery from Home Assistant.
-- A dashboard of controller status and unacknowledged alarms.
+- A dashboard of door lock state and unacknowledged alarms, plus controller status with **Include controllers and entry panels** on.
 - Recording door activity alongside other building systems.
 
 ## Known limitations
@@ -313,7 +313,7 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 | **Can't connect** during setup | For Direct, check that Home Assistant can reach the server on port 443. For Remote, check that remote access is on in Paxton10. |
 | **The username or password is wrong** | Sign in to the Paxton10 web UI with the same account. |
 | **Open** fails: the door didn't unlock within 5 seconds | Check whether an intruder alarm covering the door is armed, whether the door is in lockdown, and whether the door is online. Also check that the account has building permission to the door. |
-| Fewer entities than expected | The account may lack permission for devices or the summary. Try an administrator account to compare. |
+| Fewer entities than expected | No controllers or entry panels: check **Include controllers and entry panels** in **Configure**, which is off for new installs. Otherwise the account may lack permission for devices or the summary: try an administrator account to compare. |
 | No door events, and the log says the account can't read the event log | The Paxton account lacks the **Reports** permission, which the event log needs. Everything else keeps working without it. Grant the permission in Paxton10, then reload the integration. |
 | No door events | Download diagnostics (open the integration, click the three dots, then **Download diagnostics**) and check `event_log_forbidden` and `event_source`. `event_log_forbidden: true` means the account lacks the **Reports** permission (see the row above). If the event poll itself is failing, every entity is unavailable and the log says why; turn on debug logging for `custom_components.paxton10` for more detail. `last_event_id` isn't a health check: it's `null` while the event log is empty or unreadable, and it can be set by the start-up read alone. |
 | **Paxton10 is using the fallback route** repair | The main route failed. Check the network path. The repair clears itself once the main route works again. |
