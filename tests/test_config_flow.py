@@ -77,8 +77,13 @@ async def test_user_flow(hass: HomeAssistant, server: FakeServer, route: str, ty
         CONF_USERNAME: USERNAME,
         CONF_PASSWORD_HASH: password_hash(PASSWORD),
     }
-    # The two switches on the confirm step are options, so Configure can change them later.
-    assert result["result"].options == {OPT_ALLOW_DOOR_CONTROL: True, OPT_INCLUDE_USER_NAMES: False}
+    # The switches on the confirm step are options, so Configure can change them later. Controllers and
+    # entry panels default to off for a new entry: most of the traffic, and not needed for doors and events.
+    assert result["result"].options == {
+        OPT_ALLOW_DOOR_CONTROL: True,
+        "include_hardware": False,
+        OPT_INCLUDE_USER_NAMES: False,
+    }
     # The plain password is never stored.
     assert PASSWORD not in str(result["data"])
     assert server.calls[0][0] == target
@@ -318,8 +323,9 @@ async def test_interval_options_migrated_away(hass: HomeAssistant, server: FakeS
     assert entry.minor_version == 1
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert entry.minor_version == 2
-    assert entry.options == {OPT_ALLOW_DOOR_CONTROL: True}
+    assert entry.minor_version == 3
+    # 1.3 keeps controllers and entry panels on for entries that had them before the option existed.
+    assert entry.options == {OPT_ALLOW_DOOR_CONTROL: True, "include_hardware": True}
     source = entry.runtime_data.source
     assert source._device_interval == 30 and source._device_full_interval == 600 and source._event_interval == 10
 

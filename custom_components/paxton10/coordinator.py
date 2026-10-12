@@ -35,6 +35,7 @@ from .const import (
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
     OPT_INCLUDE_CREDENTIAL_NAMES,
+    OPT_INCLUDE_HARDWARE,
     OPT_INCLUDE_USER_NAMES,
 )
 from .discovery import discover_site
@@ -58,6 +59,7 @@ class EntryOptions:
     fallback_target: str | None
     include_user_names: bool
     include_credential_names: bool
+    include_hardware: bool
 
     @classmethod
     def from_entry(cls, entry: ConfigEntry) -> EntryOptions:
@@ -67,6 +69,7 @@ class EntryOptions:
             fallback_target=(o.get(OPT_FALLBACK_TARGET) or None) if o.get(OPT_FALLBACK) else None,
             include_user_names=bool(o.get(OPT_INCLUDE_USER_NAMES, False)),
             include_credential_names=bool(o.get(OPT_INCLUDE_CREDENTIAL_NAMES, False)),
+            include_hardware=bool(o.get(OPT_INCLUDE_HARDWARE, False)),
         )
 
 
@@ -113,7 +116,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
     async def _async_update_data(self) -> Site:
         """Full read of the site. Used at setup and by the hourly rediscovery."""
         try:
-            site = await discover_site(self.conn)
+            site = await discover_site(self.conn, self.options.include_hardware)
         except PaxtonAuthError as err:
             raise ConfigEntryAuthFailed(translation_domain=DOMAIN, translation_key="invalid_auth") from err
         except PaxtonError as err:
@@ -248,7 +251,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
         """Pick up added and removed doors and devices, and move back off the fallback route."""
         try:
             await self.conn.try_primary()
-            site = await discover_site(self.conn)
+            site = await discover_site(self.conn, self.options.include_hardware)
         except PaxtonError as err:
             _LOGGER.debug("Paxton10 rediscovery failed, keeping the current layout: %s", err)
             return

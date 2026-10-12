@@ -20,6 +20,7 @@ OPT_FALLBACK = "fallback"
 OPT_FALLBACK_TARGET = "fallback_target"
 OPT_INCLUDE_USER_NAMES = "include_user_names"
 OPT_INCLUDE_CREDENTIAL_NAMES = "include_credential_names"
+OPT_INCLUDE_HARDWARE = "include_hardware"
 
 # Fixed intervals. Home Assistant doesn't let users set polling intervals in core integrations, so
 # these aren't options. Removed options are dropped from the entry by async_migrate_entry.

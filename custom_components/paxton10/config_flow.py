@@ -39,6 +39,7 @@ from .const import (
     OPT_FALLBACK,
     OPT_FALLBACK_TARGET,
     OPT_INCLUDE_CREDENTIAL_NAMES,
+    OPT_INCLUDE_HARDWARE,
     OPT_INCLUDE_USER_NAMES,
     ROUTE_DIRECT,
     ROUTE_REMOTE,
@@ -134,7 +135,7 @@ async def _try(
 
 class Paxton10ConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 2  # 1.2 dropped the interval options
+    MINOR_VERSION = 3  # 1.2 dropped the interval options; 1.3 kept controllers on for existing entries
 
     def __init__(self) -> None:
         self._route = ROUTE_DIRECT
@@ -193,6 +194,7 @@ class Paxton10ConfigFlow(ConfigFlow, domain=DOMAIN):
                 data=self._data,
                 options={
                     OPT_ALLOW_DOOR_CONTROL: user_input[OPT_ALLOW_DOOR_CONTROL],
+                    OPT_INCLUDE_HARDWARE: user_input[OPT_INCLUDE_HARDWARE],
                     OPT_INCLUDE_USER_NAMES: user_input[OPT_INCLUDE_USER_NAMES],
                 },
             )
@@ -202,6 +204,7 @@ class Paxton10ConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=probatio.Schema(
                 {
                     probatio.Required(OPT_ALLOW_DOOR_CONTROL, default=False): BooleanSelector(),
+                    probatio.Required(OPT_INCLUDE_HARDWARE, default=False): BooleanSelector(),
                     probatio.Required(OPT_INCLUDE_USER_NAMES, default=False): BooleanSelector(),
                 }
             ),
@@ -323,6 +326,7 @@ class Paxton10OptionsFlow(OptionsFlowWithReload):
         schema = probatio.Schema(
             {
                 probatio.Required(OPT_ALLOW_DOOR_CONTROL, default=False): BooleanSelector(),
+                probatio.Required(OPT_INCLUDE_HARDWARE, default=False): BooleanSelector(),
                 probatio.Required(OPT_FALLBACK, default=False): BooleanSelector(),
                 probatio.Optional(OPT_FALLBACK_TARGET): str,
                 probatio.Required(OPT_INCLUDE_USER_NAMES, default=False): BooleanSelector(),

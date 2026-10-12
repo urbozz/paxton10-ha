@@ -6,20 +6,24 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN, REMOVED_OPTIONS
+from .const import DOMAIN, OPT_INCLUDE_HARDWARE, REMOVED_OPTIONS
 from .coordinator import Paxton10ConfigEntry, Paxton10Coordinator
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.EVENT, Platform.SENSOR]
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: Paxton10ConfigEntry) -> bool:
-    """1.1 to 1.2: drop the interval options. The intervals are fixed now.
+    """1.1 to 1.2: drop the interval options, which are fixed now. 1.2 to 1.3: controllers and entry
+    panels became an option that's off for new entries, so keep them on for existing ones.
 
     Home Assistant refuses an entry from a newer major version before calling this.
     """
     if entry.minor_version < 2:
         options = {k: v for k, v in entry.options.items() if k not in REMOVED_OPTIONS}
         hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    if entry.minor_version < 3:
+        options = {OPT_INCLUDE_HARDWARE: True, **entry.options}
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
     return True
 
 

@@ -41,7 +41,7 @@ HACS offers published releases only, not the latest code on `main`.
 
    The integration signs in straight away. If it can't, the error and its cause appear on the same screen, so you can fix the address and try again.
 5. Check the server name, software version, doors, and devices found.
-6. Choose whether to turn on **Allow door control** and **Include user names in events**. Both are off by default. You can change them later in **Configure**.
+6. Choose whether to turn on **Allow door control**, **Include controllers and entry panels**, and **Include user names in events**. All three are off by default. You can change them later in **Configure**.
 7. Click **Submit**.
 
 Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in expects, never the password. That hash is enough to sign in to this Paxton10 server, so treat Home Assistant backups as sensitive.
@@ -56,6 +56,7 @@ Home Assistant stores only the SHA-1 password hash that the Paxton10 sign-in exp
 | Username | The Paxton10 account's email address. |
 | Password | The Paxton10 account's password. Only its hash is stored. |
 | Allow door control | See [Options](#options). |
+| Include controllers and entry panels | See [Options](#options). |
 | Include user names in events | See [Options](#options). |
 
 To change the connection or the Paxton account later, open the integration and click **Reconfigure**. You can switch to another account on the same site without deleting the integration, so entity names, areas, and dashboards are kept. Enter the new account's password; to change only the address, leave the password blank to keep the current one. Reconfigure refuses a server that belongs to a different site. If the password changes, Home Assistant asks you to sign in again.
@@ -96,6 +97,7 @@ With this set-up, tested on 4.11:
 - The Lock sensors still show every unlock and relock of the doors the account can see, without saying who. A door's real lock state isn't personal data.
 - **Open** works on the doors the person's building permissions allow.
 - The server's summary sensors (Active users and the others) are site-wide figures.
+- Leave **Include controllers and entry panels** off: a person's own login rarely needs the building's hardware, and it saves most of the traffic, which matters if each person's Home Assistant uses Remote.
 - Each of the integration's sign-ins appears in Paxton's event log under that person's name.
 
 ## Options
@@ -105,6 +107,7 @@ Open the integration and click **Configure**.
 | Option | Default | Description |
 |---|---|---|
 | Allow door control | Off | Adds an **Open** button for each door, gate, and barrier (Paxton calls them access points). When off, Home Assistant creates no buttons and the client refuses every write. |
+| Include controllers and entry panels | Off | Adds a device for each controller and entry panel, with Connectivity, Status, Battery, Battery state, Power supply, Firmware, and IP address. Reading them is about 80% of the integration's traffic, so leave it off if you only need doors, their lock state, events, and **Open**, as most users do. Turn it on to monitor the building's hardware, for example to be told when a controller goes offline or loses mains power. Turning it off removes those devices. Installs from before version 0.7.12 keep it on. |
 | Use a fallback route | Off | If the configured route fails, try the other one. Home Assistant raises a repair issue while it uses the fallback. Every hour it tests the main route on a separate connection, and switches back only once that connection signs in. |
 | Fallback address or remote ID | Empty | The address or remote ID for the fallback route. Required when the fallback is on. |
 | Include user names in events | Off | Adds the user's name to door events. User names are personal data. |
@@ -119,9 +122,9 @@ How often the integration reads from Paxton isn't an option: Home Assistant does
 | Paxton10 item | Home Assistant device |
 |---|---|
 | Server | One device with the system summary and software version. |
-| Door controller (GEN1 and GEN2) | One device per controller, named after the door it drives, connected via the server. |
-| Door, gate, or barrier | One device per door, connected via the controller that drives it. A door no controller drives is connected via the server. |
-| Entry panel | One device per panel, named after the door it serves. A panel that serves no door keeps its Paxton name, or is called **Entry panel** and its ID if Paxton only has its serial number. |
+| Door controller (GEN1 and GEN2) | One device per controller, named after the door it drives, connected via the server. Only with **Include controllers and entry panels** on. |
+| Door, gate, or barrier | One device per door, connected via the controller that drives it. A door no controller drives, or any door while **Include controllers and entry panels** is off, is connected via the server. |
+| Entry panel | Only with **Include controllers and entry panels** on. One device per panel, named after the door it serves. A panel that serves no door keeps its Paxton name, or is called **Entry panel** and its ID if Paxton only has its serial number. |
 
 The integration doesn't suggest areas. Paxton door names usually include the floor already, and Home Assistant adds the area to new entity IDs, so a suggested area would repeat it. Assign areas yourself in **Settings > Areas, labels & zones**.
 
@@ -144,6 +147,8 @@ Contacts, push buttons, break glass units, and other inputs in the device tree a
 | Controller | Battery | Diagnostic. `good`, `low`, `critical`, or `not_connected` (no battery fitted). Matches the web app's battery icon, so a fitted battery that reports no charge shows its charging state as `low` (charging) or `critical` (discharging). |
 | Controller | Battery state | Diagnostic. `charging` or `discharging`. |
 | Controller | Power supply | Diagnostic. `external` (mains) or `failure` (running on battery). |
+
+The controller and entry panel entities exist only with **Include controllers and entry panels** on.
 
 The battery and power supply states use the codes from the Paxton10 web app. A code the web app calls unknown shows as unknown.
 
@@ -204,7 +209,7 @@ Each event also appears in **Logbook**, and in the door's **Activity** on its de
 - **Events while the live feed is down:** every 10 seconds, the integration reads the newest 50 entries in the event log and fires the ones it hasn't seen. It tries the live feed again with backoff, up to every 5 minutes.
 - **Door lock state:** live on the same feed, and also read every 30 seconds. A poll never overwrites a newer live update.
 - **Summary:** every 30 seconds. The figures are Paxton's own, and Paxton doesn't always keep them up to date: see [Known limitations](#known-limitations).
-- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware): the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (such as a restart, a reinstate, going offline or online, a power failure, or a low battery), and otherwise every 10 minutes (30 minutes on Remote). The hourly layout check reads the list too, and counts as one of these reads. A restart or reinstate shows within about a second, through its hardware event. Going offline should log a hardware event too, but that hasn't been seen on a live site yet; failing that, it shows once Paxton's offline device count changes, or at the next controller read. A change that moves neither count and logs no event, such as a firmware version, can take up to 10 minutes (30 on Remote) to show.
+- **Controllers and entry panels** (connectivity, status, battery, power supply, firmware), only with **Include controllers and entry panels** on: the full list is large, about 57 KB per controller, so it's read only when needed. That's straight away when the summary's offline device or unacknowledged alarm count changes, or when a controller reports a hardware event (such as a restart, a reinstate, going offline or online, a power failure, or a low battery), and otherwise every 10 minutes (30 minutes on Remote). The hourly layout check reads the list too, and counts as one of these reads. A restart or reinstate shows within about a second, through its hardware event. Going offline should log a hardware event too, but that hasn't been seen on a live site yet; failing that, it shows once Paxton's offline device count changes, or at the next controller read. A change that moves neither count and logs no event, such as a firmware version, can take up to 10 minutes (30 on Remote) to show.
 - **Layout:** every hour, the integration reads the device tree and the controller list again. It adds new doors and devices, and removes devices that are no longer on the server.
 
 If the device read or an event log read fails, every entity becomes unavailable and Home Assistant logs it once. Entities stay unavailable until the read that failed succeeds again. A success on the other read doesn't hide the failure. Each read retries with backoff up to 5 minutes. Tokens last 12 hours. The integration signs in again by itself when a token expires. If the server rejects the stored credentials, polling stops and Home Assistant asks you to sign in again, so a changed password can't lock the account.
@@ -238,7 +243,7 @@ actions:
       entity_id: button.vehicle_gate_open
 ```
 
-Alert when a controller goes offline:
+Alert when a controller goes offline (needs **Include controllers and entry panels**):
 
 ```yaml
 triggers:
@@ -252,7 +257,7 @@ actions:
       message: Main entrance door controller is offline
 ```
 
-Alert when a controller loses mains power and runs on its battery:
+Alert when a controller loses mains power and runs on its battery (needs **Include controllers and entry panels**):
 
 ```yaml
 triggers:
@@ -286,7 +291,7 @@ Entity IDs depend on your areas and names. Check them in **Settings > Devices & 
 - While polling, if more than 50 events happen between two polls, only the newest 50 are fired.
 - Controller status and the summary are polled, not pushed. Paxton accepts the live feed's controller status and battery subscriptions but sent nothing during a live controller restart and reinstate, so the integration doesn't use them. The hardware events that trigger an early device refresh come from the Paxton10 web app's event list. Only type 12, which Paxton logs when a controller restarts or is reinstated, has been seen on a live site.
 - The Connectivity mapping comes from the Paxton10 web app's status list. Online and refreshing have been seen live. Offline, on battery, updating, rebooting, and reinstating haven't yet.
-- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes (30 on Remote), or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller on Direct, and about 3 MB a day per controller on Remote. Before version 0.7.0, which read it every 30 seconds, it was about 165 MB a day per controller. The rest adds about 25 MB a day, depending on how busy the doors are. On Remote, all of it goes through Paxton's relay, which Paxton doesn't support for this use and could limit.
+- The controller list is large (about 57 KB per controller) because Paxton includes every input and output. That's why it's read every 10 minutes (30 on Remote), or when something changes, rather than every 30 seconds. Traffic scales with the number of controllers: about 8 MB a day per controller on Direct, and about 3 MB a day per controller on Remote. Before version 0.7.0, which read it every 30 seconds, it was about 165 MB a day per controller. The rest adds about 25 MB a day, depending on how busy the doors are. With **Include controllers and entry panels** off, the controller list is never read, so the integration uses only that 25 MB or so. On Remote, all of it goes through Paxton's relay, which Paxton doesn't support for this use and could limit.
 - **Active users** can be hours out of date. Paxton resets it at midnight UTC, and recalculates it only when a new session starts: when someone signs in to the Paxton10 web app, or when Home Assistant starts or reloads the integration. It doesn't change each time someone uses a credential, and reading it more often doesn't help. Signing in again on a schedule would refresh it, but every sign-in adds an "operator logged on" entry to Paxton's event log, so the integration doesn't. Use door events for anything that needs to be timely. The offline device count comes from the same summary. A controller that restarts or is reinstated also logs a hardware event, which triggers a controller read straight away; going offline is expected to as well, but that hasn't been seen on a live site yet.
 - Lists are read 100 items at a time, and only the first 100 are read: the controllers, the entry panels, and each group in the device tree. A site with more than 100 of any of these would be missing the rest. The largest site tested has 13 doors.
 - The server isn't discovered automatically. Enter its address yourself.

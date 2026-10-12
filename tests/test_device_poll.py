@@ -248,3 +248,55 @@ async def test_remote_reads_the_list_less_often(
     src.request_device_refresh()
     await src.poll_devices()
     assert reads(server, CONTROLLERS) == before + 2
+
+
+PANELS = "/api/v1/Devices/3/false?page=0&pageSize=100"
+
+
+async def test_without_hardware_the_controller_list_is_never_read(
+    hass: HomeAssistant, server: FakeServer, clock: dict[str, float]
+) -> None:
+    """With Include controllers and entry panels off, the large list is never read, and doors hang off the server."""
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.paxton10.const import DOMAIN, OPT_INCLUDE_HARDWARE
+
+    from .conftest import SITE_ID, entity_id
+
+    entry = await setup(hass, {OPT_INCLUDE_HARDWARE: False})
+    src = source(entry)
+    await src.async_stop()
+    assert reads(server, CONTROLLERS) == reads(server, PANELS) == 0
+    # No controller or entry panel entities; doors, their Lock sensors, and the summary are still there.
+    assert entity_id(hass, "binary_sensor", 4001, "connectivity") is None
+    assert entity_id(hass, "sensor", 4002, "status") is None
+    assert entity_id(hass, "binary_sensor", 2001, "lock") is not None
+    assert entity_id(hass, "event", 2001, "door_event") is not None
+    devices = dr.async_get(hass)
+    door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
+    assert door and door.via_device_id == coordinator(entry).server_device_id
+    # Not on a full refresh, a hardware event, a count change, or the hourly layout check either.
+    clock["t"] += 10 * DEVICE_FULL_INTERVAL
+    src.request_device_refresh()
+    await src.poll_devices(full=True)
+    await coordinator(entry)._async_rediscover()
+    assert reads(server, CONTROLLERS) == reads(server, PANELS) == 0
+
+
+async def test_turning_hardware_off_removes_its_devices(hass: HomeAssistant, server: FakeServer) -> None:
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.paxton10.const import DOMAIN, OPT_INCLUDE_HARDWARE
+
+    from .conftest import SITE_ID
+
+    entry = await setup(hass)
+    devices = dr.async_get(hass)
+    assert devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id)
+    hass.config_entries.async_update_entry(entry, options={**entry.options, OPT_INCLUDE_HARDWARE: False})
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id) is None
+    assert devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4002"), entry.entry_id) is None
+    door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
+    assert door and door.via_device_id == coordinator(entry).server_device_id

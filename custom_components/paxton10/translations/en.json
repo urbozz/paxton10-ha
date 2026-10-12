@@ -42,10 +42,12 @@
         "description": "Server: {server}\nSoftware version: {version}\nDoors found ({doors}): {door_names}\nControllers and entry panels found: {devices}\n\nYou can change these settings later in Configure.",
         "data": {
           "allow_door_control": "Allow door control",
+          "include_hardware": "Include controllers and entry panels",
           "include_user_names": "Include user names in events"
         },
         "data_description": {
-          "allow_door_control": "Adds an Open button for each door and the gate. When off, Home Assistant never sends a write to Paxton.",
+          "allow_door_control": "Adds an Open button for each door, gate, and barrier. When off, Home Assistant never sends a write to Paxton.",
+          "include_hardware": "Adds a device for each controller and entry panel, with status, battery, power supply, and firmware. Reading them is most of the integration's network traffic. Leave it off for an account that only needs its doors and events, such as one person's own login; turn it on to monitor the building's hardware.",
           "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default."
         }
       },
@@ -118,6 +120,7 @@
         "title": "Paxton10 options",
         "data": {
           "allow_door_control": "Allow door control",
+          "include_hardware": "Include controllers and entry panels",
           "fallback": "Use a fallback route",
           "fallback_target": "Fallback address or remote ID",
           "include_user_names": "Include user names in events",
@@ -125,6 +128,7 @@
         },
         "data_description": {
           "allow_door_control": "Adds an Open button for each door, gate, and barrier. When off, Home Assistant sends no writes at all.",
+          "include_hardware": "Adds a device for each controller and entry panel, with status, battery, power supply, and firmware. Reading them is most of the integration's network traffic. Leave it off for an account that only needs its doors and events, such as one person's own login; turn it on to monitor the building's hardware.",
           "fallback": "If the configured route fails, try the other one ({other_route}).",
           "fallback_target": "The address or remote ID for the {other_route} route. You can paste a whole address.",
           "include_user_names": "Adds user names to door events. Names are personal data, so this is off by default.",

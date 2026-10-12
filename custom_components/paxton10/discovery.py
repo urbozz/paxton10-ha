@@ -119,15 +119,22 @@ async def read_door_states(conn: PaxtonConnection, door_ids: list[int]) -> dict[
     return parse_door_states(await conn.post(PATH_DOOR_STATES, door_ids))
 
 
-async def discover_site(conn: PaxtonConnection) -> Site:
-    """Full read of the site. Optional reads the account can't make are skipped, not fatal."""
+async def discover_site(conn: PaxtonConnection, include_devices: bool = True) -> Site:
+    """Full read of the site. Optional reads the account can't make are skipped, not fatal.
+
+    Without include_devices, the controller list (about 57 KB per controller, most of the
+    integration's traffic) is never read, so there are no controller or entry panel entities.
+    """
     site = Site(server=await read_server(conn), doors=await read_doors(conn))
-    try:
-        site.devices = await read_devices(conn)
-        name_hardware(site.devices, site.doors)
-    except PaxtonForbidden:
+    if not include_devices:
         site.can_read_devices = False
-        _LOGGER.info("This Paxton account can't read devices; no controller or panel entities")
+    else:
+        try:
+            site.devices = await read_devices(conn)
+            name_hardware(site.devices, site.doors)
+        except PaxtonForbidden:
+            site.can_read_devices = False
+            _LOGGER.info("This Paxton account can't read devices; no controller or panel entities")
     try:
         site.summary = await read_summary(conn)
     except PaxtonForbidden:
