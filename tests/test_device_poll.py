@@ -283,7 +283,9 @@ async def test_without_hardware_the_controller_list_is_never_read(
     assert reads(server, CONTROLLERS) == reads(server, PANELS) == 0
 
 
-async def test_turning_hardware_off_removes_its_devices(hass: HomeAssistant, server: FakeServer) -> None:
+async def test_turning_hardware_off_removes_its_devices(
+    hass: HomeAssistant, server: FakeServer, caplog: pytest.LogCaptureFixture
+) -> None:
     from homeassistant.helpers import device_registry as dr
 
     from custom_components.paxton10.const import DOMAIN, OPT_INCLUDE_HARDWARE
@@ -298,5 +300,7 @@ async def test_turning_hardware_off_removes_its_devices(hass: HomeAssistant, ser
     await hass.async_block_till_done()
     assert devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4001"), entry.entry_id) is None
     assert devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_4002"), entry.entry_id) is None
+    # Removed with async_remove_device: taking the config entry off a device is deprecated (2027.8).
+    assert "remove_config_entry_id" not in caplog.text
     door = devices.async_get_device_by_identifier((DOMAIN, f"{SITE_ID}_2001"), entry.entry_id)
     assert door and door.via_device_id == coordinator(entry).server_device_id

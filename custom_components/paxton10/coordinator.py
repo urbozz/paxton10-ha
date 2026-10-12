@@ -275,7 +275,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
                 continue
             # Log the Paxton entity id, not the name: a generated name can contain a serial.
             _LOGGER.info("Removing Paxton10 device that's no longer on the server: %s", ", ".join(ours))
-            registry.async_update_device(device.id, remove_config_entry_id=self.config_entry.entry_id)
+            registry.async_remove_device(device.id)
             # Platforms forget the id, so the entities come back if the device reappears.
             for ident in ours:
                 if ident.startswith(prefix) and ident[len(prefix) :].isdigit():
