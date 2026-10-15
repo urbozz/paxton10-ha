@@ -216,7 +216,7 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
     async def _async_handle_update(self, update: SourceUpdate) -> None:
         if update.error is not None:
             if isinstance(update.error, PaxtonAuthError):
-                _LOGGER.warning("Paxton10 rejected the stored credentials; starting reauthentication")
+                _LOGGER.warning("Paxton10 rejected the stored credentials (%s); starting reauthentication", update.error)
                 self.config_entry.async_start_reauth(self.hass)
             self._failing.add(update.kind)
             # Marks every entity unavailable; the coordinator logs the change once.

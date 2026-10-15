@@ -304,7 +304,7 @@ These rules are enforced in the client (`api.py`) and are covered by the tests:
 - The client sends `POST` or `PUT` only to paths on its allowlist. The only write on that list is door release (`/api/v2/System/ActivateAppliances`), and it's blocked unless **Allow door control** is on.
 - The integration never calls endpoints that look like reads but change configuration, such as `POST /api/v2/device/states`, or `POST` and `PUT` on users, time constraints, dashboards, or permissions.
 - Tokens, passwords, and hashes are never logged. Diagnostics redact credentials, addresses, serial numbers, the site ID, user names, and credential names.
-- If the account isn't allowed to read something (HTTP 403 or 405, or 404 for door state), the integration skips those entities instead of failing. A 401 means the sign-in was rejected: the integration signs in again once, and if that's rejected too, Home Assistant asks you to sign in again.
+- If the account isn't allowed to read something (HTTP 403 or 405, or 404 for door state), the integration skips those entities instead of failing. A 401 means the sign-in was rejected: the integration signs in again once, and if Paxton rejects the username or password, Home Assistant asks you to sign in again. Any other sign-in failure, such as HTTP 502 while the Paxton server restarts, is retried like a network error.
 
 ## Troubleshooting
 

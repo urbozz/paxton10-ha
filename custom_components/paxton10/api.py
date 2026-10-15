@@ -375,8 +375,14 @@ class PaxtonClient:
         form = urlencode({"grant_type": "password", "username": username, "password": pw_hash})
         resp = await self._send("POST", "/token", form, "application/x-www-form-urlencoded", authed=False)
         body = resp.body if isinstance(resp.body, dict) else {}
+        if resp.status in (400, 401) and body.get("error"):
+            # Paxton's answer to a wrong username or password, for example
+            # HTTP 400 {"error": "AuthenticationFailedInvalidCredentials"}.
+            raise PaxtonAuthError(body.get("error_description") or body["error"])
         if resp.status != 200 or "access_token" not in body:
-            raise PaxtonAuthError(body.get("error_description") or body.get("error") or f"HTTP {resp.status}")
+            # Anything else, such as HTTP 502 while the server restarts, says nothing about the
+            # password: retry it like any other failed call instead of starting reauthentication.
+            raise PaxtonError(f"POST /token: HTTP {resp.status}")
         self._token = body["access_token"]
         self.token_expires_in = body.get("expires_in")
 

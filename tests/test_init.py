@@ -446,6 +446,23 @@ async def test_auth_failure_later_starts_reauth(hass: HomeAssistant, server: Fak
     assert [f["context"]["source"] for f in hass.config_entries.flow.async_progress()] == ["reauth"]
 
 
+async def test_server_restart_does_not_start_reauth(hass: HomeAssistant, server: FakeServer) -> None:
+    """While Paxton restarts, its web server answers 502, including to the sign-in."""
+    entry = await setup(hass)
+    server.expire_tokens = 1
+    server.status["/token"] = 502
+    with pytest.raises(PaxtonError) as err:
+        await source(entry).poll_devices(full=True)
+    assert not isinstance(err.value, PaxtonAuthError)
+    await hass.async_block_till_done()
+    assert hass.config_entries.flow.async_progress() == []
+
+    # Once the server is back, the next poll signs in and carries on.
+    del server.status["/token"]
+    await source(entry).poll_devices(full=True)
+    assert hass.config_entries.flow.async_progress() == []
+
+
 async def test_setup_not_ready(hass: HomeAssistant, server: FakeServer) -> None:
     server.down.add("192.0.2.1")
     entry = await setup(hass)

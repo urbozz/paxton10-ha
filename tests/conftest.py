@@ -137,6 +137,8 @@ class FakeServer:
         self.calls.append((target, method, path, parsed))
         if target in self.down:
             raise PaxtonError(f"{target} unreachable")
+        if path == "/token" and path in self.status:
+            return Response(self.status[path], "<html>Bad Gateway</html>")
         if path == "/token":
             fields = dict(p.split("=", 1) for p in (body or "").split("&"))
             if fields.get("password") != self.password_hash:

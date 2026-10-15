@@ -97,6 +97,26 @@ async def test_direct_sign_in_rejected(hass: HomeAssistant, aioclient_mock: Aioh
         await client.sign_in("u", "p")
 
 
+@pytest.mark.parametrize(
+    ("status", "kwargs"),
+    [
+        (502, {"text": "<html>Bad Gateway</html>"}),
+        (503, {"json": {"Message": "Service unavailable"}}),
+        (400, {"text": "not json"}),
+        (200, {"json": {"token_type": "bearer"}}),
+    ],
+)
+async def test_direct_sign_in_failure_is_not_a_rejected_password(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, status: int, kwargs: dict
+) -> None:
+    """A server that's restarting or answers oddly must not start reauthentication."""
+    aioclient_mock.post("https://192.0.2.1/token", status=status, **kwargs)
+    client = PaxtonClient(DirectTransport(async_get_clientsession(hass), "192.0.2.1"))
+    with pytest.raises(PaxtonError, match=f"POST /token: HTTP {status}") as err:
+        await client.sign_in("u", "p")
+    assert not isinstance(err.value, PaxtonAuthError)
+
+
 def test_create_client_routes() -> None:
     session = MagicMock()
     assert create_client(session, "remote", "abc123", True).transport.name == "remote"
