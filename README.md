@@ -16,9 +16,9 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 ### HACS
 
-1. Click the **Open in HACS** badge at the top of this page. It opens this repository in your Home Assistant's HACS.
+Paxton10 is in the HACS default store, so you don't need to add it as a custom repository.
 
-   Alternatively, in HACS, open the menu, then click **Custom repositories**. Add this repository's URL with the type **Integration**.
+1. In Home Assistant, open **HACS**, and search for **Paxton10**. Alternatively, click the **Open in HACS** badge at the top of this page.
 2. Click **Download**, then restart Home Assistant.
 
 HACS offers published releases only, not the latest code on `main`.
@@ -332,7 +332,7 @@ logger:
 
 1. In Home Assistant, go to **Settings > Devices & services > Paxton10**.
 2. Click the three dots, then **Delete**.
-3. Optional: delete `custom_components/paxton10` and restart Home Assistant.
+3. Optional: remove the integration's files, then restart Home Assistant. If you installed it with HACS, open **HACS > Paxton10 > ⋮ > Remove**. If you installed it manually, delete `custom_components/paxton10`.
 4. Optional: delete or disable the Home Assistant account in Paxton10.
 
 ## Development
