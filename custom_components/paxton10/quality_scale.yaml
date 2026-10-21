@@ -10,7 +10,7 @@ rules:
   # Remote), or at once on a count change or hardware event; events live on Direct and Remote (log read
   # every 5 min, 10 s while the feed is down); hourly rediscovery. 1.2 removed the interval options.
   appropriate-polling: done
-  brands: done  # brand/icon.png and icon@2x.png: Paxton's triangle mark, redrawn from paxton-access.com
+  brands: done  # brand/icon.png and icon@2x.png: Paxton's triangle mark, redrawn from paxton-access.com; logo.png and logo@2x.png: the Paxton10 logo, rendered from Paxton's own SVG in the Paxton10 web app
   common-modules: done  # coordinator.py, entity.py, connection.py, models.py
   config-flow-test-coverage: done
   config-flow: done  # data_description on every field
