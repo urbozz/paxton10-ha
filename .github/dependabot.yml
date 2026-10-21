@@ -1,0 +1,9 @@
+# Keeps the GitHub Actions in .github/workflows up to date. Each update arrives as a pull request
+# for review; nothing changes without a merge. Python test tools in requirements_test.txt aren't
+# watched: ruff and mypy are pinned on purpose, so their updates are made by hand.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
