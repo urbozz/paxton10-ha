@@ -19,6 +19,8 @@ TO_REDACT = {
     "ip",
     "serial",
     "site_id",
+    "system_name",
+    "server_name",
     "user_name",
     "credential_name",
 }

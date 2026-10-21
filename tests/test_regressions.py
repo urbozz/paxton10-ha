@@ -532,3 +532,151 @@ async def test_issue3_call_in_flight_survives_the_switch_back(hass: HomeAssistan
     with pytest.raises(PaxtonError, match="down"):
         await conn.get("/api/v1/System/Software/Version")
     assert conn._client is None
+
+
+# Review (v0.7.15): privacy, write safety, and lifecycle fixes.
+
+
+async def test_review_diagnostics_redact_site_and_server_names(hass: HomeAssistant, server: FakeServer) -> None:
+    entry = await setup(hass)
+    diag = await async_get_config_entry_diagnostics(hass, entry)
+    assert diag["server"]["system_name"] == "**REDACTED**"
+    assert diag["server"]["server_name"] == "**REDACTED**"
+    text = json.dumps(diag, default=str)
+    assert "Test Site" not in text and "PAXTON10-TEST" not in text
+
+
+def test_review_scrub_keeps_remote_id_and_queries_out_of_errors() -> None:
+    from custom_components.paxton10.api import scrub
+
+    text = scrub("InvalidURL: https://negotiate.p10remote.com/api/negotiateclient?remoteId=abc123 for abc123", "abc123")
+    assert "abc123" not in text and "remoteId" not in text
+    assert text == "InvalidURL: https://negotiate.p10remote.com/api/negotiateclient?<query> for <remote id>"
+
+
+async def test_review_remote_connect_error_hides_the_remote_id() -> None:
+    from custom_components.paxton10.api import RemoteTransport
+
+    session = fake_session(FakeWS())
+    session.get = MagicMock(
+        side_effect=aiohttp.InvalidURL("https://negotiate.p10remote.com/api/negotiateclient?remoteId=abc123")
+    )
+    with pytest.raises(PaxtonError) as err:
+        await RemoteTransport(session, "abc123").start()
+    assert "abc123" not in str(err.value) and "InvalidURL" in str(err.value)
+
+
+async def test_review_failed_send_leaves_no_future_behind() -> None:
+    from custom_components.paxton10.api import RemoteTransport
+
+    ws = FakeWS()
+    transport = RemoteTransport(fake_session(ws), "abc123")
+    await transport.start()
+    ws.send_str = AsyncMock(side_effect=ConnectionResetError("reset"))  # type: ignore[method-assign]
+    with pytest.raises(PaxtonError, match="ConnectionResetError"):
+        await transport.send("GET", "/api/v1/System/Software/Version", "tok", None, "application/json")
+    assert transport._pending == {}
+    with pytest.raises(PaxtonError, match="ConnectionResetError"):
+        await transport.hub_invoke("SubscribeToEvents", [], "tok")
+    assert transport._hub_calls == {}
+    await transport.close()
+
+
+async def test_review_a_write_is_never_sent_twice_after_a_switch(hass: HomeAssistant, server: FakeServer) -> None:
+    """A release with no reply isn't repeated on the new route: the site may already have opened the door."""
+    from custom_components.paxton10.const import (
+        OPT_ALLOW_DOOR_CONTROL,
+        OPT_FALLBACK,
+        OPT_FALLBACK_TARGET,
+    )
+
+    server.down.add("192.0.2.1")
+    entry = await setup(hass, {OPT_ALLOW_DOOR_CONTROL: True, OPT_FALLBACK: True, OPT_FALLBACK_TARGET: "abc123"})
+    conn = coordinator(entry).conn
+    old = conn._client
+    assert old and conn.active_route == "remote"
+
+    async def swap_then_fail(path: str, data: Any) -> Any:
+        server.down.clear()
+        assert await conn.try_primary()
+        raise PaxtonError("no reply from the site within 20 s")
+
+    old.post = swap_then_fail  # type: ignore[method-assign]
+    release = "/api/v2/System/ActivateAppliances"
+    with pytest.raises(PaxtonError, match="no reply"):
+        await conn.post(release, {"Appliances": [2001]})
+    assert conn.active_route == "direct"
+    assert server.sent("POST", release) == []
+
+
+async def test_review_closed_connection_never_signs_in_again(
+    hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from custom_components.paxton10 import connection as connection_mod
+    from custom_components.paxton10.const import OPT_FALLBACK, OPT_FALLBACK_TARGET
+
+    server.down.add("192.0.2.1")
+    entry = await setup(hass, {OPT_FALLBACK: True, OPT_FALLBACK_TARGET: "abc123"})
+    conn = coordinator(entry).conn
+
+    # The hourly probe signs in on the primary while the entry unloads: the probe is closed, not kept.
+    server.down.clear()
+    real_create = connection_mod.create_client
+    closed: list[Any] = []
+
+    def create(*args: Any, **kwargs: Any) -> Any:
+        client = real_create(*args, **kwargs)
+        sign_in, close = client.sign_in_with_hash, client.close
+
+        async def sign_in_then_unload(*a: Any) -> None:
+            await sign_in(*a)
+            await conn.close()
+
+        async def record_close() -> None:
+            closed.append(client)
+            await close()
+
+        client.sign_in_with_hash = sign_in_then_unload
+        client.close = record_close
+        return client
+
+    monkeypatch.setattr(connection_mod, "create_client", create)
+    assert await conn.try_primary() is False
+    assert closed and conn._client is None and conn.active_route is None
+    # A call that arrives after the unload doesn't sign in again.
+    with pytest.raises(PaxtonError, match="connection closed"):
+        await conn.get("/api/v1/System/Software/Version")
+    assert conn._client is None
+    assert await conn.try_primary() is False
+
+
+async def test_review_forbidden_event_log_clears_an_earlier_failure(hass: HomeAssistant, server: FakeServer) -> None:
+    from custom_components.paxton10.source import KIND_EVENTS
+
+    entry = await setup(hass)
+    coord = coordinator(entry)
+    await coord._async_handle_update(SourceUpdate(KIND_EVENTS, error=PaxtonError("HTTP 502")))
+    assert not coord.last_update_success
+    server.status["/api/v2/Events/?page=0&pageSize=50"] = 403
+    await source(entry).poll_events()
+    await hass.async_block_till_done()
+    assert source(entry).events_forbidden
+    assert coord.last_update_success
+
+
+async def test_review_recovery_is_logged_once(
+    hass: HomeAssistant, server: FakeServer, caplog: pytest.LogCaptureFixture
+) -> None:
+    from custom_components.paxton10.source import KIND_EVENTS, KIND_STATUS
+
+    entry = await setup(hass)
+    coord = coordinator(entry)
+    caplog.set_level(logging.INFO, logger="custom_components.paxton10")
+    await coord._async_handle_update(SourceUpdate(KIND_EVENTS, error=PaxtonError("HTTP 502")))
+    await coord._async_handle_update(SourceUpdate(KIND_STATUS, error=PaxtonError("HTTP 502")))
+    await coord._async_handle_update(SourceUpdate(KIND_EVENTS))
+    assert "responding again" not in caplog.text  # the status read still fails
+    await coord._async_handle_update(SourceUpdate(KIND_STATUS, summary=coord.data.summary))
+    await coord._async_handle_update(SourceUpdate(KIND_STATUS, summary=coord.data.summary))
+    assert caplog.text.count("Paxton10 is responding again") == 1
+    assert coord.last_update_success

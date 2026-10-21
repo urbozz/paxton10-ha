@@ -305,6 +305,9 @@ class PollingSource(UpdateSource):
                 "Give it the Reports permission in Paxton10, then reload the integration",
                 err,
             )
+            if self._callback:
+                # Clears an earlier event-read failure, which would otherwise keep entities unavailable.
+                await self._callback(SourceUpdate(KIND_EVENTS))
             return
         raw = body.get("Result") if isinstance(body, dict) else None
         if not isinstance(raw, list):

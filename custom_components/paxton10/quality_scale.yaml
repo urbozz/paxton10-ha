@@ -8,7 +8,7 @@ rules:
     comment: No service actions. Door release is a button entity.
   # Fixed intervals, not options: summary and door state 30 s; full controller list 10 min (30 min on
   # Remote), or at once on a count change or hardware event; events live on Direct and Remote (log read
-  # every 5 min, 10 s while the feed is down); hourly rediscovery. 1.2 removed the interval options.
+  # every 5 min, 10 s while the feed is down); hourly rediscovery. Config entry version 1.2 removed the interval options.
   appropriate-polling: done
   brands: done  # brand/icon.png and icon@2x.png: Paxton's triangle mark, redrawn from paxton-access.com; logo.png and logo@2x.png: the Paxton10 logo, rendered from Paxton's own SVG in the Paxton10 web app
   common-modules: done  # coordinator.py, entity.py, connection.py, models.py
@@ -46,7 +46,7 @@ rules:
   docs-installation-parameters: done
   entity-unavailable: done
   integration-owner: done
-  log-when-unavailable: done  # the coordinator logs once on failure and once on recovery
+  log-when-unavailable: done  # one error when a read fails, and one info line when every read works again
   parallel-updates: done
   reauthentication-flow: done
   test-coverage: done  # 99% across all modules
@@ -83,4 +83,4 @@ rules:
   # Platinum
   async-dependency: done
   inject-websession: done
-  strict-typing: done  # mypy --strict passes
+  strict-typing: done  # mypy --strict passes, with no ignore_missing_imports

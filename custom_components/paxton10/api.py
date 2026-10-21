@@ -84,6 +84,12 @@ def check_allowed(method: str, path: str, allow_writes: bool) -> None:
     raise PaxtonBlockedRequest(f"{method} {path} is not on the allowlist (writes {'on' if allow_writes else 'off'})")
 
 
+def scrub(text: str, remote_id: str) -> str:
+    """Keep the remote ID and URL query strings out of error text, which ends up in logs."""
+    text = re.sub(r"\?[^\s'\"]*", "?<query>", text)
+    return text.replace(remote_id, "<remote id>") if remote_id else text
+
+
 def _parse(text: str) -> Any:
     try:
         return json.loads(text) if text else None
@@ -184,7 +190,12 @@ class RemoteTransport:
         fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
         self._hub_calls[invocation] = fut
         envelope = {"arguments": [json.dumps(call)], "invocationId": invocation, "target": TARGET_HUB_CALL, "type": 1}
-        await self._ws.send_str(json.dumps(envelope) + RECORD_SEPARATOR)
+        try:
+            await self._ws.send_str(json.dumps(envelope) + RECORD_SEPARATOR)
+        except (aiohttp.ClientError, ConnectionError, RuntimeError) as err:
+            # The socket dropped before the reader noticed. Don't leave the future behind.
+            self._hub_calls.pop(invocation, None)
+            raise PaxtonError(f"hub {method}: {type(err).__name__}") from err
         try:
             return await asyncio.wait_for(fut, timeout=20)
         except asyncio.TimeoutError as err:
@@ -202,7 +213,7 @@ class RemoteTransport:
             raise PaxtonError("remote connect: no reply within 20 s") from err
         except (aiohttp.ClientError, KeyError, TypeError, ValueError, AttributeError) as err:
             # Some aiohttp errors have an empty str(), so always name the type.
-            raise PaxtonError(f"remote connect: {type(err).__name__}: {err}".rstrip(": ")) from err
+            raise PaxtonError(scrub(f"remote connect: {type(err).__name__}: {err}".rstrip(": "), self._remote_id)) from err
 
     async def _start(self) -> None:
         timeout = aiohttp.ClientTimeout(total=20)
@@ -343,7 +354,12 @@ class RemoteTransport:
             "target": "UiApiRequest",
             "type": 1,
         }
-        await self._ws.send_str(json.dumps(envelope) + RECORD_SEPARATOR)
+        try:
+            await self._ws.send_str(json.dumps(envelope) + RECORD_SEPARATOR)
+        except (aiohttp.ClientError, ConnectionError, RuntimeError) as err:
+            # The socket dropped before the reader noticed. Don't leave the future behind.
+            self._pending.pop(message_id, None)
+            raise PaxtonError(f"{method} {path}: {type(err).__name__}") from err
         try:
             return await asyncio.wait_for(fut, timeout=20)
         except asyncio.TimeoutError as err:

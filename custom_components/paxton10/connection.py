@@ -14,6 +14,7 @@ from typing import Any
 import aiohttp
 
 from .api import (
+    READ_POSTS,
     DirectTransport,
     PaxtonAuthError,
     PaxtonBlockedRequest,
@@ -46,6 +47,10 @@ def create_client(session: aiohttp.ClientSession, route: str, target: str, allow
     return PaxtonClient(transport, allow_writes=allow_writes)
 
 
+def _is_read(method: str, path: str) -> bool:
+    return method.upper() == "GET" or any(p.match(path) for p in READ_POSTS)
+
+
 def other_route(route: str) -> str:
     return ROUTE_REMOTE if route == ROUTE_DIRECT else ROUTE_DIRECT
 
@@ -73,6 +78,7 @@ class PaxtonConnection:
         self._client: PaxtonClient | None = None
         self.active_route: str | None = None
         self._lock = asyncio.Lock()
+        self._closed = False  # set by close(); a closed connection never signs in again
 
     async def connect(self) -> None:
         """Sign in on the first route that works. Auth errors are final: the password is wrong on every route."""
@@ -81,6 +87,9 @@ class PaxtonConnection:
 
     async def _connect_locked(self) -> None:
         await self._drop()
+        if self._closed:
+            # A job that was already running when the entry unloaded mustn't leave a new client open.
+            raise PaxtonError("connection closed")
         last: PaxtonError | None = None
         for route, target in self._routes:
             client = create_client(self._session, route, target, self.allow_writes)
@@ -106,7 +115,7 @@ class PaxtonConnection:
         The working fallback client stays in place unless the primary signs in. Returns True on a switch.
         """
         route, target = self._routes[0]
-        if self.active_route in (None, route):
+        if self._closed or self.active_route in (None, route):
             return False
         probe = create_client(self._session, route, target, self.allow_writes)
         try:
@@ -116,6 +125,9 @@ class PaxtonConnection:
             _LOGGER.debug("Paxton10 primary route (%s) still unavailable: %s", route, err)
             return False
         async with self._lock:
+            if self._closed:
+                await probe.close()
+                return False
             old, self._client, self.active_route = self._client, probe, route
         if old:
             with contextlib.suppress(Exception):
@@ -131,6 +143,7 @@ class PaxtonConnection:
 
     async def close(self) -> None:
         async with self._lock:
+            self._closed = True
             await self._drop()
 
     @property
@@ -214,7 +227,8 @@ class PaxtonConnection:
                     swapped = self._client is not None and self._client is not client
                     if not swapped:
                         await self._drop()
-                if swapped and attempt == 1:
+                # Never repeat a write: the site may have carried out the first one before the reply was lost.
+                if swapped and attempt == 1 and _is_read(method, path):
                     continue
                 raise
             if resp.status in (403, 405):

@@ -232,8 +232,11 @@ class Paxton10Coordinator(DataUpdateCoordinator[Site]):
         for event in update.events:
             self._fire(event)
         self._update_fallback_issue()
+        was_failing = bool(self._failing)
         recovered = update.kind in self._failing
         self._failing.discard(update.kind)
+        if was_failing and not self._failing:
+            _LOGGER.info("Paxton10 is responding again")
         if recovered or update.devices is not None or update.summary is not None or update.door_states is not None:
             self._publish(site)
 
