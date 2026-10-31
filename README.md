@@ -6,6 +6,8 @@ This custom integration connects Home Assistant to a Paxton10 access control ser
 
 It uses the Paxton10 web app's internal API. Paxton doesn't document or support that API, so a Paxton software upgrade can break the integration. It was built against Paxton10 4.11 SR1 (`4.11.9753.20528`).
 
+Paxton10 for Home Assistant is an unofficial community project, not affiliated with or endorsed by Paxton Access Ltd. Product names, trademarks, and logos are the property of their respective owners, and are used only to identify the system this integration works with.
+
 ## Prerequisites
 
 - Home Assistant 2026.10.0 or later.
