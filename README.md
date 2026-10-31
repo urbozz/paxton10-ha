@@ -1,6 +1,6 @@
 # Paxton10 for Home Assistant
 
-[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=urbozz&repository=paxton10-ha&category=integration)
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=urbozz&repository=paxton10-ha&category=integration)
 
 This custom integration connects Home Assistant to a Paxton10 access control server. It shows each door's lock state, fires an event for each door event in the Paxton log, can show the status of the door controllers and entry panels, and, if you turn it on, adds an **Open** button for each door, gate, and barrier.
 
@@ -14,14 +14,15 @@ It uses the Paxton10 web app's internal API. Paxton doesn't document or support 
 
 ## Install
 
-### HACS
+### Marketplace
 
-Paxton10 is in the HACS default store, so you don't need to add it as a custom repository.
+Paxton10 is in the Home Assistant Marketplace catalogue, so you don't need to add it from a link.
 
-1. In Home Assistant, open **HACS**, and search for **Paxton10**. Alternatively, click the **Open in HACS** badge at the top of this page.
-2. Click **Download**, then restart Home Assistant.
+1. In Home Assistant, go to **Settings > Marketplace**, and search for **Paxton10**. Alternatively, click the badge at the top of this page.
+2. Select **Install**, then select **Install** again in the dialog.
+3. If Home Assistant asks for a restart, restart it.
 
-HACS offers published releases only, not the latest code on `main`.
+The Marketplace offers published releases only, not the latest code on `main`. On Home Assistant 2026.10, which has no Marketplace, install Paxton10 from HACS in the same way.
 
 ### Manual
 
@@ -332,7 +333,7 @@ logger:
 
 1. In Home Assistant, go to **Settings > Devices & services > Paxton10**.
 2. Click the three dots, then **Delete**.
-3. Optional: remove the integration's files, then restart Home Assistant. If you installed it with HACS, open **HACS > Paxton10 > ⋮ > Remove**. If you installed it manually, delete `custom_components/paxton10`.
+3. Optional: remove the integration's files. If you installed it from the Marketplace, go to **Settings > Marketplace > Paxton10**, then select **⋮ > Uninstall**. **Delete and uninstall** there also does step 2 for you. On Home Assistant 2026.10, open **HACS > Paxton10 > ⋮ > Remove**. If you installed it manually, delete `custom_components/paxton10`, then restart Home Assistant.
 4. Optional: delete or disable the Home Assistant account in Paxton10.
 
 ## Development
@@ -355,7 +356,7 @@ uv venv -p 3.14 .venv && uv pip install -p .venv/bin/python -r requirements_test
 .venv/bin/ruff check .
 ```
 
-CI runs the same checks: ruff, mypy, and the tests, plus Home Assistant's hassfest and the HACS validation.
+CI runs the same checks: ruff, mypy, and the tests, plus Home Assistant's hassfest and the HACS validation. The Marketplace still reads `hacs.json`, so that file and its validation stay.
 
 Before a release, test on a real system: add the integration over Direct and then over Remote, confirm the entities, and test door release on one door with someone watching it.
 
