@@ -10,6 +10,7 @@ Paxton10 for Home Assistant is an unofficial community project, not affiliated w
 
 ## Prerequisites
 
+- A Paxton10 system. This integration doesn't work with Paxton Net2 or other Paxton systems, which use different software.
 - Home Assistant 2026.10.0 or later.
 - A network path from Home Assistant to the Paxton10 server (Direct), or Paxton remote access turned on for the site (Remote).
 - A dedicated Paxton10 account for Home Assistant, so the Paxton event log shows which actions came from Home Assistant. Build and test with an administrator account first, then move to an account with only the permissions it needs, using **Reconfigure**: see [Paxton account permissions](#paxton-account-permissions).
