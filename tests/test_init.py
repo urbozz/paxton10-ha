@@ -446,8 +446,14 @@ async def test_auth_failure_later_starts_reauth(hass: HomeAssistant, server: Fak
     assert [f["context"]["source"] for f in hass.config_entries.flow.async_progress()] == ["reauth"]
 
 
-async def test_server_restart_does_not_start_reauth(hass: HomeAssistant, server: FakeServer) -> None:
+async def test_server_restart_does_not_start_reauth(
+    hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """While Paxton restarts, its web server answers 502, including to the sign-in."""
+    from custom_components.paxton10 import connection as connection_mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(connection_mod, "_monotonic", lambda: clock[0])
     entry = await setup(hass)
     server.expire_tokens = 1
     server.status["/token"] = 502
@@ -457,8 +463,13 @@ async def test_server_restart_does_not_start_reauth(hass: HomeAssistant, server:
     await hass.async_block_till_done()
     assert hass.config_entries.flow.async_progress() == []
 
-    # Once the server is back, the next poll signs in and carries on.
+    # The server is back, but the connection waits 10 s after a failed sign-in before trying again.
     del server.status["/token"]
+    sign_ins = len(server.sent("POST", "/token"))
+    with pytest.raises(PaxtonError, match="next try in 10 s"):
+        await source(entry).poll_devices(full=True)
+    assert len(server.sent("POST", "/token")) == sign_ins  # nothing sent while waiting
+    clock[0] += 10
     await source(entry).poll_devices(full=True)
     assert hass.config_entries.flow.async_progress() == []
 

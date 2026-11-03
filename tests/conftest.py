@@ -122,6 +122,7 @@ class FakeServer:
     status: dict[str, int] = field(default_factory=dict)  # path -> forced HTTP status
     down: set[str] = field(default_factory=set)  # targets that can't be reached
     expire_tokens: int = 0  # reject this many authed calls with 401
+    token_error: str | None = None  # answer every sign-in with HTTP 400 and this error, as 4.12 did while starting
     calls: list[tuple[str, str, str, Any]] = field(default_factory=list)  # (target, method, path, body)
     tokens: int = 0
 
@@ -139,6 +140,8 @@ class FakeServer:
             raise PaxtonError(f"{target} unreachable")
         if path == "/token" and path in self.status:
             return Response(self.status[path], "<html>Bad Gateway</html>")
+        if path == "/token" and self.token_error:
+            return Response(400, {"error": self.token_error})
         if path == "/token":
             fields = dict(p.split("=", 1) for p in (body or "").split("&"))
             if fields.get("password") != self.password_hash:

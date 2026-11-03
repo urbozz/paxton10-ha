@@ -56,6 +56,15 @@ class PaxtonAuthError(PaxtonError):
     """Sign-in rejected or token expired."""
 
 
+class PaxtonSignInRejected(PaxtonError):
+    """Paxton refused a sign-in without saying the credentials were wrong.
+
+    Paxton10 4.12 answered HTTP 400 {"error": "AuthenticationFailed"} for a short time while it
+    started up after an upgrade, although the password was right. The connection retries it, and
+    only treats it as a rejected password if it lasts.
+    """
+
+
 class PaxtonBlockedRequest(PaxtonError):
     """The client refused to send a request that isn't on an allowlist."""
 
@@ -392,9 +401,12 @@ class PaxtonClient:
         resp = await self._send("POST", "/token", form, "application/x-www-form-urlencoded", authed=False)
         body = resp.body if isinstance(resp.body, dict) else {}
         if resp.status in (400, 401) and body.get("error"):
-            # Paxton's answer to a wrong username or password, for example
-            # HTTP 400 {"error": "AuthenticationFailedInvalidCredentials"}.
-            raise PaxtonAuthError(body.get("error_description") or body["error"])
+            reason = body.get("error_description") or body["error"]
+            if "InvalidCredentials" in str(body["error"]):
+                # Paxton's answer to a wrong username or password:
+                # HTTP 400 {"error": "AuthenticationFailedInvalidCredentials"}.
+                raise PaxtonAuthError(reason)
+            raise PaxtonSignInRejected(f"POST /token: Paxton rejected the sign-in ({reason})")
         if resp.status != 200 or "access_token" not in body:
             # Anything else, such as HTTP 502 while the server restarts, says nothing about the
             # password: retry it like any other failed call instead of starting reauthentication.

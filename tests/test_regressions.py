@@ -680,3 +680,95 @@ async def test_review_recovery_is_logged_once(
     await coord._async_handle_update(SourceUpdate(KIND_STATUS, summary=coord.data.summary))
     assert caplog.text.count("Paxton10 is responding again") == 1
     assert coord.last_update_success
+
+
+# Paxton10 4.12 upgrade (2026-11-03): while the server started, sign-in answered
+# HTTP 400 {"error": "AuthenticationFailed"}, and the integration took it for a wrong password.
+
+
+async def test_upgrade_generic_sign_in_refusal_is_retried(
+    hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from custom_components.paxton10 import connection as connection_mod
+    from custom_components.paxton10.api import PaxtonAuthError, PaxtonSignInRejected
+
+    clock = [1000.0]
+    monkeypatch.setattr(connection_mod, "_monotonic", lambda: clock[0])
+    entry = await setup(hass)
+    conn = coordinator(entry).conn
+    await conn._drop()  # as after a dropped connection: the next call signs in
+    server.token_error = "AuthenticationFailed"
+
+    with pytest.raises(PaxtonSignInRejected, match=r"rejected the sign-in \(AuthenticationFailed\)") as err:
+        await conn.get("/api/v1/System/Software/Version")
+    assert not isinstance(err.value, PaxtonAuthError)
+    await hass.async_block_till_done()
+    assert hass.config_entries.flow.async_progress() == []
+
+    # The server finishes starting: the next try after the wait signs in, and nothing asked for a password.
+    server.token_error = None
+    clock[0] += 10
+    assert await conn.get("/api/v1/System/Software/Version") == "4.11.9753.20528"
+    assert conn._rejected_since is None and conn._sign_in_delay == 0
+
+
+async def test_generic_refusal_that_lasts_15_minutes_starts_reauth(
+    hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from custom_components.paxton10 import connection as connection_mod
+    from custom_components.paxton10.api import PaxtonAuthError, PaxtonSignInRejected
+
+    clock = [1000.0]
+    monkeypatch.setattr(connection_mod, "_monotonic", lambda: clock[0])
+    entry = await setup(hass)
+    conn = coordinator(entry).conn
+    await conn._drop()
+    server.token_error = "AuthenticationFailed"
+
+    tried_at, delays = [], []
+    for _ in range(7):
+        tried_at.append(clock[0] - 1000)
+        with pytest.raises(PaxtonSignInRejected):
+            await conn.get("/x")
+        delays.append(conn._sign_in_delay)
+        clock[0] += conn._sign_in_delay
+    # The wait doubles from 10 s and stops at 5 minutes, so 7 tries fit in the first 15 minutes.
+    assert delays == [10, 20, 40, 80, 160, 300, 300]
+    assert tried_at == [0, 10, 30, 70, 150, 310, 610]
+    # The next try, at 910 s, is past 15 minutes of refusals: now it asks for the password.
+    with pytest.raises(PaxtonAuthError, match="for 15 minutes"):
+        await conn.get("/x")
+    await hass.async_block_till_done()
+
+
+async def test_invalid_credentials_still_start_reauth_at_once(hass: HomeAssistant, server: FakeServer) -> None:
+    from custom_components.paxton10.api import PaxtonAuthError
+
+    entry = await setup(hass)
+    conn = coordinator(entry).conn
+    await conn._drop()
+    server.token_error = "AuthenticationFailedInvalidCredentials"
+    with pytest.raises(PaxtonAuthError, match="AuthenticationFailedInvalidCredentials"):
+        await conn.get("/x")
+
+
+async def test_sign_in_backoff_paces_every_loop(
+    hass: HomeAssistant, server: FakeServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """During an outage, calls between sign-in attempts fail at once and send nothing."""
+    from custom_components.paxton10 import connection as connection_mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(connection_mod, "_monotonic", lambda: clock[0])
+    entry = await setup(hass)
+    conn = coordinator(entry).conn
+    await conn._drop()
+    server.status["/token"] = 502
+    with pytest.raises(PaxtonError, match="HTTP 502"):
+        await conn.get("/x")
+    sent = len(server.sent("POST", "/token"))
+    for _ in range(5):
+        clock[0] += 1
+        with pytest.raises(PaxtonError, match="next try in"):
+            await conn.get("/x")
+    assert len(server.sent("POST", "/token")) == sent

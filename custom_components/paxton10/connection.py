@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import math
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -20,12 +22,22 @@ from .api import (
     PaxtonBlockedRequest,
     PaxtonClient,
     PaxtonError,
+    PaxtonSignInRejected,
     RemoteTransport,
     Response,
 )
 from .const import ROUTE_DIRECT, ROUTE_REMOTE
 
 _LOGGER = logging.getLogger(__name__)
+
+# After a failed sign-in, wait before the next one: 10 s, then doubling up to 5 min. Every poll
+# loop signs in through here, so this paces them all, and keeps a refused account from being retried
+# every few seconds.
+SIGN_IN_BACKOFF_START = 10.0
+SIGN_IN_BACKOFF_MAX = 300.0
+# A sign-in refused without "InvalidCredentials" counts as a rejected password only after this long.
+SIGN_IN_REJECTED_GRACE = 900.0
+_monotonic = time.monotonic  # tests replace this
 
 
 class PaxtonForbidden(PaxtonError):
@@ -79,6 +91,9 @@ class PaxtonConnection:
         self.active_route: str | None = None
         self._lock = asyncio.Lock()
         self._closed = False  # set by close(); a closed connection never signs in again
+        self._sign_in_delay = 0.0
+        self._next_sign_in = 0.0  # monotonic time before which no sign-in is tried
+        self._rejected_since: float | None = None  # first generic refusal since the last sign-in
 
     async def connect(self) -> None:
         """Sign in on the first route that works. Auth errors are final: the password is wrong on every route."""
@@ -90,6 +105,9 @@ class PaxtonConnection:
         if self._closed:
             # A job that was already running when the entry unloaded mustn't leave a new client open.
             raise PaxtonError("connection closed")
+        now = _monotonic()
+        if now < self._next_sign_in:
+            raise PaxtonError(f"sign-in failed; next try in {math.ceil(self._next_sign_in - now)} s")
         last: PaxtonError | None = None
         for route, target in self._routes:
             client = create_client(self._session, route, target, self.allow_writes)
@@ -97,7 +115,18 @@ class PaxtonConnection:
                 await client.sign_in_with_hash(self._username, self._pw_hash)
             except PaxtonAuthError:
                 await client.close()
+                self._sign_in_failed()
                 raise
+            except PaxtonSignInRejected as err:
+                await client.close()
+                if self._rejected_since is None:
+                    self._rejected_since = now
+                if now - self._rejected_since >= SIGN_IN_REJECTED_GRACE:
+                    self._sign_in_failed()
+                    raise PaxtonAuthError(f"{err}, for {SIGN_IN_REJECTED_GRACE / 60:.0f} minutes") from err
+                _LOGGER.warning("Paxton10 sign-in over %s failed: %s", route, err)
+                last = err
+                continue
             except PaxtonError as err:
                 await client.close()
                 _LOGGER.warning("Paxton10 sign-in over %s failed: %s", route, err)
@@ -106,8 +135,14 @@ class PaxtonConnection:
             if route != self._routes[0][0]:
                 _LOGGER.warning("Paxton10 is using the fallback route (%s)", route)
             self._client, self.active_route = client, route
+            self._sign_in_delay, self._next_sign_in, self._rejected_since = 0.0, 0.0, None
             return
+        self._sign_in_failed()
         raise last or PaxtonError("no route configured")
+
+    def _sign_in_failed(self) -> None:
+        self._sign_in_delay = min(max(self._sign_in_delay * 2, SIGN_IN_BACKOFF_START), SIGN_IN_BACKOFF_MAX)
+        self._next_sign_in = _monotonic() + self._sign_in_delay
 
     async def try_primary(self) -> bool:
         """While on the fallback route, try the primary route on a separate client.
